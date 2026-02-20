@@ -5,12 +5,14 @@ interface Props {
   title?: string;
   description?: string;
   ogImage?: string;
+  lang?: string;
 }
 
 const {
   title = 'Aethos Tech Blog',
   description = 'Engineering blog. AI experiments. Micro SaaS learnings.',
   ogImage = '/og-default.png',
+  lang = 'en',
 } = Astro.props;
 
 const siteTitle = title === 'Aethos Tech Blog' ? title : `${title} — Aethos Tech`;
@@ -18,11 +20,12 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#0a0a0a" />
     <meta property="og:title" content={siteTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={new URL(ogImage, Astro.site)} />
@@ -36,92 +39,124 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
   </head>
   <body style="background: var(--color-background); color: var(--color-text); min-height: 100vh; display: flex; flex-direction: column;">
 
+    <!-- Skip to content (a11y) -->
+    <a
+      href="#main-content"
+      style="position: absolute; left: -9999px; top: 1rem; z-index: 9999; background: var(--color-background); color: var(--color-text); padding: 0.5rem 1rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 0.875rem; text-decoration: none;"
+      class="focus-skip"
+    >
+      Skip to content
+    </a>
+
     <!-- Header -->
     <header style="position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--color-border); background: var(--color-header-bg); backdrop-filter: blur(12px);">
-      <nav style="max-width: 800px; margin: 0 auto; padding: 0 1.5rem; height: 60px; display: flex; align-items: center; justify-content: space-between;">
-
-        <!-- Logo → links back to main site -->
-        <div style="display: flex; align-items: center; gap: 1.25rem;">
+      <nav
+        aria-label="Main navigation"
+        style="max-width: 800px; margin: 0 auto; padding: 0 1.5rem; height: 60px; display: flex; align-items: center; justify-content: space-between;"
+      >
+        <!-- Breadcrumb logo -->
+        <div style="display: flex; align-items: center; gap: 1.25rem; min-width: 0;">
           <a
             href="https://aethostech.com.br"
             target="_blank"
-            rel="noopener"
-            style="font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--color-text); text-decoration: none; letter-spacing: -0.01em;"
+            rel="noopener noreferrer"
+            style="font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--color-text); text-decoration: none; letter-spacing: -0.01em; white-space: nowrap; transition: color 150ms ease-out;"
+            class="nav-logo"
           >
             Aethos Tech
           </a>
-          <span style="color: var(--color-border); font-size: 1rem;">/</span>
+          <span aria-hidden="true" style="color: var(--color-border); flex-shrink: 0;">/</span>
           <a
             href="/"
-            style="font-family: var(--font-display); font-weight: 500; font-size: 0.95rem; color: var(--color-text-muted); text-decoration: none;"
+            aria-current="page"
+            style="font-family: var(--font-display); font-weight: 500; font-size: 0.95rem; color: var(--color-text-muted); text-decoration: none; white-space: nowrap; transition: color 150ms ease-out;"
+            class="nav-logo-sub"
           >
             Blog
           </a>
         </div>
 
-        <!-- Nav -->
-        <div style="display: flex; align-items: center; gap: 1.25rem;">
-          <a href="/" style="color: var(--color-text-muted); text-decoration: none; font-size: 0.875rem; font-weight: 400;">Posts</a>
-          <a href="/about" style="color: var(--color-text-muted); text-decoration: none; font-size: 0.875rem; font-weight: 400;">About</a>
-          <a
-            href="/rss.xml"
-            style="color: var(--color-text-muted); text-decoration: none; font-size: 0.875rem;"
-            title="RSS Feed"
-          >RSS</a>
+        <!-- Nav links -->
+        <div style="display: flex; align-items: center; gap: 1.25rem; flex-shrink: 0;">
+          <a href="/" class="nav-link">Posts</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/rss.xml" class="nav-link" title="Subscribe via RSS" aria-label="RSS Feed">RSS</a>
           <button
             id="theme-toggle"
-            aria-label="Toggle theme"
-            style="background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 6px; padding: 0.3rem 0.55rem; cursor: pointer; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1;"
+            aria-label="Switch to light mode"
+            aria-pressed="false"
+            style="background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 6px; padding: 0.3rem 0.55rem; cursor: pointer; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1; transition: background 150ms ease-out, border-color 150ms ease-out;"
           >
-            <span id="theme-icon">☀️</span>
+            <span id="theme-icon" aria-hidden="true">☀️</span>
           </button>
         </div>
       </nav>
     </header>
 
     <!-- Main content -->
-    <main style="flex: 1; max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem; width: 100%;">
+    <main id="main-content" style="flex: 1; max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem; width: 100%;">
       <slot />
     </main>
 
     <!-- Footer -->
     <footer style="border-top: 1px solid var(--color-border); padding: 2rem 1.5rem;">
       <div style="max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="font-family: var(--font-display); font-size: 0.875rem; color: var(--color-text-muted);">
-            © {new Date().getFullYear()} Aethos Tech
-          </span>
-        </div>
+        <span style="font-family: var(--font-display); font-size: 0.875rem; color: var(--color-text-muted);">
+          © {new Date().getFullYear()} Aethos Tech
+        </span>
         <div style="display: flex; align-items: center; gap: 1.25rem;">
           <a
             href="https://aethostech.com.br"
             target="_blank"
-            rel="noopener"
-            style="font-size: 0.8rem; color: var(--color-text-muted); text-decoration: none;"
+            rel="noopener noreferrer"
+            class="nav-link"
+            style="font-size: 0.8rem;"
           >
             aethostech.com.br ↗
           </a>
-          <a href="/rss.xml" style="font-size: 0.8rem; color: var(--color-text-muted); text-decoration: none;">RSS</a>
+          <a href="/rss.xml" class="nav-link" style="font-size: 0.8rem;">RSS</a>
         </div>
       </div>
     </footer>
 
-    <!-- Theme toggle script -->
+    <style>
+      .focus-skip:focus-visible {
+        left: 1rem !important;
+      }
+      .nav-logo:hover { color: hsl(0 0% 70%) !important; }
+      .nav-logo-sub:hover { color: var(--color-text) !important; }
+    </style>
+
     <script>
-      const toggle = document.getElementById('theme-toggle');
+      const toggle = document.getElementById('theme-toggle') as HTMLButtonElement | null;
       const icon = document.getElementById('theme-icon');
       const html = document.documentElement;
+      const metaTheme = document.querySelector('meta[name="theme-color"]');
 
-      const saved = localStorage.getItem('aethos-theme');
-      if (saved === 'light') {
-        html.classList.add('light');
-        if (icon) icon.textContent = '🌙';
+      function applyTheme(isLight: boolean) {
+        if (isLight) {
+          html.classList.add('light');
+        } else {
+          html.classList.remove('light');
+        }
+        if (icon) icon.textContent = isLight ? '🌙' : '☀️';
+        if (toggle) {
+          toggle.setAttribute('aria-pressed', String(isLight));
+          toggle.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+        }
+        if (metaTheme) {
+          metaTheme.setAttribute('content', isLight ? '#fafafa' : '#0a0a0a');
+        }
       }
 
+      // Restore saved preference
+      const saved = localStorage.getItem('aethos-theme');
+      applyTheme(saved === 'light');
+
       toggle?.addEventListener('click', () => {
-        const isLight = html.classList.toggle('light');
+        const isLight = !html.classList.contains('light');
         localStorage.setItem('aethos-theme', isLight ? 'light' : 'dark');
-        if (icon) icon.textContent = isLight ? '🌙' : '☀️';
+        applyTheme(isLight);
       });
     </script>
   </body>
