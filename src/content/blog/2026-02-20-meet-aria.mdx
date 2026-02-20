@@ -1,0 +1,156 @@
+---
+title: "Meet ARIA: Building a Personal AI Executive Assistant"
+description: "How I went from copy-pasting status updates to having an AI that actually understands my workflow — and why I built it myself instead of using off-the-shelf tools."
+date: 2026-02-20
+lang: en
+tags: [aria, ai, devtools, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+Every developer I know has a graveyard of productivity tools they tried and abandoned. Notion boards that went stale. Linear tickets nobody updated. Slack reminders that got snoozed to infinity. I was no different.
+
+What I actually wanted was simple: something that knew *my* context, could give me a real briefing in the morning, and didn't require me to update it manually. Something that worked the way my brain works, not the way some SaaS product manager thinks it should.
+
+So I built **ARIA**.
+
+## What is ARIA?
+
+**ARIA** stands for *Assistant for Reports, Insights & Agenda*. It's my personal AI executive assistant, built on top of [Claude Code](https://claude.ai/code) and a collection of MCP servers I've been developing over the past few months.
+
+The short version: ARIA is a CLI-first assistant that lives in my terminal and understands my entire work context — projects, finances, infrastructure, tasks, calendar. When I type `/aria` in the morning, I get a real briefing, not a template.
+
+```bash
+/aria                  # Morning briefing
+/aria evening          # End of day report
+/aria task "title"     # Create a task in Hub
+/aria health           # Docker + infra status
+/aria vps              # Production server health
+```
+
+It's not a product. It's not trying to be one. It's a system I designed for exactly one user: me.
+
+## How it Started
+
+The seed was frustration.
+
+I run [Aethos Tech](https://aethostech.com.br), where I build micro SaaS products and client projects simultaneously. On any given week I might be pushing a feature on a client's platform, running a CI/CD fix on a different service, and validating a new product idea. The context-switching tax is brutal.
+
+My mornings used to look like this:
+
+1. Open browser, check Linear → which tasks are due?
+2. Open another tab, check bank → did the Neon bill hit?
+3. SSH into VPS → is everything running?
+4. Check Slack/WhatsApp → anything urgent?
+5. Open VS Code → okay, *now* where was I?
+
+That's 20–30 minutes of overhead before writing a single line of code. And since it was fragmented across tools, I was constantly losing context mid-research.
+
+The first version of ARIA was just a Claude Code slash command that pulled project git status and formatted it. Honestly pretty basic. But it saved me 10 minutes every morning, and that was enough to keep building.
+
+## The Architecture
+
+ARIA is built on three layers:
+
+### 1. Claude Code + Slash Commands
+
+Claude Code supports custom slash commands via `~/.claude/` config files. Each command loads a "skill" — a detailed prompt that gives the model full context on what to do, which tools to call, and how to format output.
+
+This means `/aria` isn't a hardcoded script. It's a reasoning system that adapts: if it's morning, it runs the full briefing flow; if it's afternoon, it does a lighter check; if I ask for something specific, it handles that too.
+
+### 2. MCP Servers
+
+The real power comes from the MCP (Model Context Protocol) servers running on my machine. MCP lets you expose any data source or API as tools that Claude can call directly.
+
+I've built and connected:
+
+| MCP Server | What it does |
+|-----------|-------------|
+| **ARIA MCP** | Core: project scan, tasks, briefings, insights |
+| **Neutron** | Personal finance — P&L, budget, recurring payments |
+| **Docker MCP** | Container health, logs, start/stop |
+| **Rastro Pop MCP** | Client project monitoring (my microservices stack) |
+| **Google Calendar** | Events and scheduling |
+| **WhatsApp MCP** | Receive/send messages programmatically |
+| **Memory MCP** | Persistent knowledge graph across sessions |
+
+When I run `/aria`, Claude orchestrates calls across these servers to build a coherent picture of my day — without me lifting a finger.
+
+### 3. Hub (The Backend)
+
+Hub is a private Next.js + PostgreSQL app I run on my VPS. It's the central data store for:
+
+- Tasks (replaces Linear for my personal workflow)
+- Insights and learnings captured during sessions
+- Briefing history (so ARIA can see what it told me yesterday)
+- Project activity aggregation
+
+The interesting thing about Hub is that ARIA can still work when Hub is offline — it falls back to direct MCP calls. Queue any writes locally, sync when back online.
+
+## The 4-Tier Model Routing System
+
+One thing I'm particularly happy with: ARIA routes different tasks to different AI models based on complexity and cost.
+
+| Tier | Model | Cost | Used for |
+|------|-------|------|---------|
+| 0 | Ollama `llama3.2:3b` (local) | **Free** | Commits, summaries, translations |
+| 1 | Claude Haiku | Cheapest | Quick lookups |
+| 2 | Claude Sonnet | Moderate | Coding, features — **default** |
+| 3 | Claude Opus | Expensive | Architecture, audits |
+
+Writing a commit message? That goes to Ollama — free, instant, runs locally. Security audit? That escalates to Opus. Day-to-day coding stays on Sonnet.
+
+This keeps costs low without sacrificing quality where it matters. I'm spending roughly $15-20/month on API calls for what would otherwise require multiple SaaS subscriptions.
+
+## What It Actually Feels Like
+
+Here's a real morning briefing, lightly edited:
+
+```
+☀️ GOOD MORNING, CÉSAR
+
+📅 FRIDAY, FEB 20 — 09:14
+
+📋 TASKS (4 active)
+□ Configure Abacate Pay credentials — Menthos [HIGH]
+□ Blog first post — Aethos Blog [MEDIUM]
+□ Review Rastro Pop deploy — [HIGH]
+□ VPS disk cleanup — [LOW]
+
+🚀 PROJECTS
+🟢 aethos-blog      — 2h ago  (build: added UX fixes)
+🟡 menthos          — 1d ago  (deploy: Vercel live)
+🔴 listai-shopee    — 12d ago (waiting on client creds)
+
+💰 NEUTRON: R$ 3,200 receita / R$ 1,100 despesa | +R$ 2,100
+⚠️ Software 82% of budget
+
+🐳 DOCKER: 7 containers running, all healthy
+```
+
+That's my entire context in under 10 seconds. No tabs, no switching, no copy-pasting. Just `/aria` and go.
+
+## What's Next for ARIA
+
+ARIA is alive and evolving. Upcoming experiments:
+
+- **Proactive alerts** — WhatsApp notification when a container goes down or a task deadline is today
+- **Session learning** — ARIA capturing patterns from sessions and surfacing them as insights over time
+- **Financial forecasting** — Neutron integration deep enough to project next month's cash flow
+- **Voice interface** — Dictate tasks and capture ideas while away from keyboard
+
+I'll be writing about each of these as they get built. This blog is as much a changelog for ARIA as it is a place for broader thoughts on building tools and products.
+
+## Why Build It Yourself?
+
+Because the off-the-shelf tools don't know you.
+
+Notion doesn't know that `aethos-blog` had commits 2 hours ago. Linear doesn't know your Docker containers are healthy. Your calendar app doesn't know your Neutron budget is running hot.
+
+ARIA knows all of that. Because I built it to.
+
+That's the premise. Let's see where it goes.
+
+---
+
+*ARIA is not open source yet — it's deeply tied to my specific stack and workflows. But if you're curious about building something similar, I'm happy to talk architecture. Ping me at [aethostech.com.br](https://aethostech.com.br).*
