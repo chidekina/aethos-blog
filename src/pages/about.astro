@@ -3,7 +3,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="About" description="Learn about Aethos Labs, ARIA, and Cesar.">
-  <div class="prose">
+  <!-- English -->
+  <div class="prose" data-lang-block="en">
     <h1>About</h1>
 
     <h2>Aethos Labs</h2>
@@ -19,7 +20,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <h2>ARIA</h2>
     <p>
-      ARIA (Assistant for Reports, Insights & Agenda) is an AI executive assistant being built
+      ARIA (Assistant for Reports, Insights &amp; Agenda) is an AI executive assistant being built
       in public, one session at a time.
     </p>
     <p>
@@ -41,6 +42,48 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <p>
       If you want to follow along, subscribe to the <a href="/rss.xml">RSS feed</a> or find the
       code on <a href="https://github.com/chidekina" target="_blank" rel="noopener">GitHub</a>.
+    </p>
+  </div>
+
+  <!-- Português -->
+  <div class="prose" data-lang-block="pt" style="display:none">
+    <h1>Sobre</h1>
+
+    <h2>Aethos Labs</h2>
+    <p>
+      Aethos Labs é uma micro SaaS factory focada em construir ferramentas enxutas e opinativas para
+      o mercado brasileiro e além. A filosofia: <strong>uma feature, uma dor, um produto</strong>.
+      Sem plataformas inchadas — apenas ferramentas que resolvem problemas reais para pessoas reais.
+    </p>
+    <p>
+      Cada projeto aqui segue o princípio <em>analgésico acima de vitamina</em>. Se não resolve
+      uma dor clara e recorrente, não é construído.
+    </p>
+
+    <h2>ARIA</h2>
+    <p>
+      ARIA (Assistant for Reports, Insights &amp; Agenda) é uma assistente executiva com IA sendo construída
+      em público, uma sessão de cada vez.
+    </p>
+    <p>
+      Ela roda como um servidor MCP (Model Context Protocol) junto com o Claude Code — gerenciando tarefas,
+      monitorando infraestrutura, roteando para modelos Ollama locais para operações gratuitas e enviando
+      briefings matinais via WhatsApp. O objetivo é um co-piloto de vida dev totalmente autônomo que custa
+      quase nada para rodar.
+    </p>
+    <p>
+      Este blog documenta cada decisão, erro e avanço nesse processo.
+    </p>
+
+    <h2>Cesar</h2>
+    <p>
+      Desenvolvedor, indie hacker e o humano por trás da Aethos Labs e da ARIA. Construindo coisas em
+      Fortaleza, Brasil — principalmente em TypeScript, Python e qualquer ferramenta interessante que
+      apareceu essa semana.
+    </p>
+    <p>
+      Se quiser acompanhar, assine o <a href="/rss.xml">feed RSS</a> ou encontre o
+      código no <a href="https://github.com/chidekina" target="_blank" rel="noopener">GitHub</a>.
     </p>
   </div>
 </BaseLayout>

@@ -85,7 +85,7 @@ const articleSchema = {
           {formattedDate}
         </time>
         <span aria-hidden="true" style="color: var(--color-border);">·</span>
-        <span style="color: var(--color-text-muted); font-size: 0.875rem;">{readTime} min read</span>
+        <span style="color: var(--color-text-muted); font-size: 0.875rem;">{readTime} <span data-i18n="post.min-read">min read</span></span>
         <span aria-hidden="true" style="color: var(--color-border);">·</span>
         <span class="lang-badge" aria-label={`Language: ${post.data.lang.toUpperCase()}`}>
           {post.data.lang.toUpperCase()}
@@ -95,7 +95,7 @@ const articleSchema = {
 
       {post.data.series && (
         <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 1rem;">
-          Part of: <span style="color: var(--color-primary); font-style: italic;">{post.data.series}</span>
+          <span data-i18n="post.part-of">Part of:</span> <span style="color: var(--color-primary); font-style: italic;">{post.data.series}</span>
         </p>
       )}
 
@@ -117,7 +117,7 @@ const articleSchema = {
     {seriesPosts.length > 1 && (
       <nav aria-label={`Series: ${post.data.series}`} style="margin-top: 3rem; padding: 1.5rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;">
         <p style="font-size: 0.7rem; color: var(--color-text-muted); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.08em;">
-          Series: {post.data.series}
+          <span data-i18n="post.series">Series:</span> {post.data.series}
         </p>
         <ol style="list-style: none; padding: 0; margin: 0 0 1.25rem;">
           {seriesPosts.map((p, i) => (

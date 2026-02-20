@@ -14,7 +14,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
     <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-text); margin-bottom: 0.6rem; letter-spacing: -0.02em;">
       Aethos Tech
     </h1>
-    <p style="color: var(--color-text-muted); font-size: 1rem; max-width: 48ch; line-height: 1.6;">
+    <p style="color: var(--color-text-muted); font-size: 1rem; max-width: 48ch; line-height: 1.6;" data-i18n="hero.description">
       Engineering blog. AI experiments. Micro SaaS learnings.
     </p>
   </div>
@@ -23,7 +23,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   {allTags.length > 0 && (
     <div id="filters" style="margin-bottom: 2rem;" role="search" aria-label="Filter posts">
       <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-        <span style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 0.25rem;">
+        <span style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 0.25rem;" data-i18n="filter.tags">
           Tags
         </span>
         {allTags.map((tag) => (
@@ -44,7 +44,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   <!-- Post List -->
   <div id="post-list" role="list" aria-label="Blog posts">
     {posts.length === 0 ? (
-      <p style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;">No posts yet. Check back soon.</p>
+      <p style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;" data-i18n="post.no-posts">No posts yet. Check back soon.</p>
     ) : (
       posts.map((post) => {
         const rt = Math.ceil(readingTime(post.body).minutes);
@@ -76,7 +76,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
             <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
               <time datetime={isoDate} style="font-size: 0.8rem; color: var(--color-text-muted);">{displayDate}</time>
               <span aria-hidden="true" style="color: var(--color-border);">·</span>
-              <span style="font-size: 0.8rem; color: var(--color-text-muted);">{rt} min read</span>
+              <span style="font-size: 0.8rem; color: var(--color-text-muted);">{rt} <span data-i18n="post.min-read">min read</span></span>
               {post.data.tags.length > 0 && (
                 <>
                   <span aria-hidden="true" style="color: var(--color-border);">·</span>
@@ -96,7 +96,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
     )}
   </div>
 
-  <div id="no-results" hidden style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;">
+  <div id="no-results" hidden style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;" data-i18n="post.no-results">
     No posts match this filter.
   </div>
 </BaseLayout>
@@ -107,7 +107,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   const noResults = document.getElementById('no-results');
 
   // Lang comes from the header toggle preference
-  const activeLang = localStorage.getItem('aethos-lang') || 'all';
+  let activeLang = localStorage.getItem('aethos-lang') || 'all';
   let activeTag = new URLSearchParams(window.location.search).get('tag') || '';
 
   function setBtn(btn: HTMLButtonElement, active: boolean) {
@@ -141,4 +141,10 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
 
   tagBtns.forEach((b) => setBtn(b, b.dataset.tag === activeTag));
   applyFilters();
+
+  // Re-filter when header lang toggle fires
+  document.addEventListener('aethos:lang-change', (e) => {
+    activeLang = (e as CustomEvent<string>).detail;
+    applyFilters();
+  });
 </script>

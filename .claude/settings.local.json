@@ -6,7 +6,8 @@
       "mcp__gcalendar__list-events",
       "Bash(done)",
       "Bash(head:*)",
-      "Skill(commit-pro)"
+      "Skill(commit-pro)",
+      "Bash(git push:*)"
     ]
   }
 }
