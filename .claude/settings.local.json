@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__aria__aria_context",
+      "mcp__aria__aria_hub_data",
+      "mcp__gcalendar__list-events",
+      "Bash(done)",
+      "Bash(head:*)",
+      "Skill(commit-pro)"
+    ]
+  }
+}

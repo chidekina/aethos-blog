@@ -20,25 +20,8 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   </div>
 
   <!-- Filters -->
-  <div id="filters" style="margin-bottom: 2rem;" role="search" aria-label="Filter posts">
-    <div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-      <span style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 0.25rem;">
-        Lang
-      </span>
-      {['all', 'en', 'pt'].map((l) => (
-        <button
-          class="filter-btn"
-          data-lang={l}
-          data-active={l === 'all' ? 'true' : 'false'}
-          aria-pressed={l === 'all' ? 'true' : 'false'}
-          aria-label={l === 'all' ? 'Show all languages' : `Show ${l.toUpperCase()} posts`}
-        >
-          {l === 'all' ? 'All' : l.toUpperCase()}
-        </button>
-      ))}
-    </div>
-
-    {allTags.length > 0 && (
+  {allTags.length > 0 && (
+    <div id="filters" style="margin-bottom: 2rem;" role="search" aria-label="Filter posts">
       <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
         <span style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 0.25rem;">
           Tags
@@ -55,8 +38,8 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
           </button>
         ))}
       </div>
-    )}
-  </div>
+    </div>
+  )}
 
   <!-- Post List -->
   <div id="post-list" role="list" aria-label="Blog posts">
@@ -119,20 +102,13 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
 </BaseLayout>
 
 <script>
-  const langBtns = document.querySelectorAll<HTMLButtonElement>('.filter-btn[data-lang]');
-  const tagBtns  = document.querySelectorAll<HTMLButtonElement>('.tag-filter-btn');
-  const items    = document.querySelectorAll<HTMLElement>('.post-item');
+  const tagBtns   = document.querySelectorAll<HTMLButtonElement>('.tag-filter-btn');
+  const items     = document.querySelectorAll<HTMLElement>('.post-item');
   const noResults = document.getElementById('no-results');
 
-  let activeLang = 'all';
-  let activeTag  = '';
-
-  // Restore from URL
-  const params = new URLSearchParams(window.location.search);
-  const urlLang = params.get('lang');
-  const urlTag  = params.get('tag');
-  if (urlLang) activeLang = urlLang;
-  if (urlTag)  activeTag  = urlTag;
+  // Lang comes from the header toggle preference
+  const activeLang = localStorage.getItem('aethos-lang') || 'all';
+  let activeTag = new URLSearchParams(window.location.search).get('tag') || '';
 
   function setBtn(btn: HTMLButtonElement, active: boolean) {
     btn.dataset.active = String(active);
@@ -151,28 +127,18 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
     if (noResults) noResults.hidden = visible !== 0;
 
     const p = new URLSearchParams();
-    if (activeLang !== 'all') p.set('lang', activeLang);
     if (activeTag) p.set('tag', activeTag);
     const qs = p.toString();
     history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
   }
 
-  function syncButtons() {
-    langBtns.forEach((btn) => setBtn(btn, btn.dataset.lang === activeLang));
-    tagBtns.forEach((btn)  => setBtn(btn, btn.dataset.tag  === activeTag));
-  }
-
-  langBtns.forEach((btn) => btn.addEventListener('click', () => {
-    activeLang = btn.dataset.lang ?? 'all';
-    syncButtons(); applyFilters();
-  }));
-
   tagBtns.forEach((btn) => btn.addEventListener('click', () => {
     const tag = btn.dataset.tag ?? '';
     activeTag = activeTag === tag ? '' : tag;
-    syncButtons(); applyFilters();
+    tagBtns.forEach((b) => setBtn(b, b.dataset.tag === activeTag));
+    applyFilters();
   }));
 
-  syncButtons();
+  tagBtns.forEach((b) => setBtn(b, b.dataset.tag === activeTag));
   applyFilters();
 </script>

@@ -91,16 +91,6 @@ const articleSchema = {
           {post.data.lang.toUpperCase()}
         </span>
 
-        <!-- Language toggle -->
-        {post.data.translationSlug && (
-          <a
-            href={`/blog/${post.data.translationSlug}/`}
-            class="lang-toggle"
-            aria-label={`Read in ${post.data.lang === 'en' ? 'Portuguese' : 'English'}`}
-          >
-            {post.data.lang === 'en' ? 'Ler em PT' : 'Read in EN'}
-          </a>
-        )}
       </div>
 
       {post.data.series && (
