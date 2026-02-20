@@ -195,11 +195,10 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   const tagsOverflow = document.getElementById('tags-overflow') as HTMLElement | null;
   tagsMoreBtn?.addEventListener('click', () => {
     const expanded = tagsMoreBtn.getAttribute('aria-expanded') === 'true';
+    if (!tagsMoreBtn.dataset.label) tagsMoreBtn.dataset.label = tagsMoreBtn.textContent!.trim();
     tagsOverflow!.style.display = expanded ? 'none' : 'flex';
     tagsMoreBtn.setAttribute('aria-expanded', String(!expanded));
-    tagsMoreBtn.textContent = expanded ? tagsMoreBtn.dataset.label ?? tagsMoreBtn.textContent : 'less';
-    if (!tagsMoreBtn.dataset.label) tagsMoreBtn.dataset.label = tagsMoreBtn.textContent!;
-    tagsMoreBtn.textContent = expanded ? tagsMoreBtn.dataset.label : 'less';
+    tagsMoreBtn.textContent = expanded ? tagsMoreBtn.dataset.label! : 'less';
   });
 
   // Per-post tags: expand/collapse
@@ -209,8 +208,8 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
       const hidden = btn.previousElementSibling as HTMLElement | null;
       if (hidden) hidden.style.display = expanded ? 'none' : 'flex';
       btn.setAttribute('aria-expanded', String(!expanded));
-      const total = parseInt(btn.textContent?.replace('+','') ?? '0') + 2;
-      btn.textContent = expanded ? `+${total - 2}` : 'less';
+      if (!btn.dataset.originalText) btn.dataset.originalText = btn.textContent!.trim();
+      btn.textContent = expanded ? btn.dataset.originalText! : 'less';
     });
   });
 </script>
