@@ -26,7 +26,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
         <span style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 0.25rem;" data-i18n="filter.tags">
           Tags
         </span>
-        {allTags.map((tag) => (
+        {allTags.slice(0, 8).map((tag) => (
           <button
             class="tag-filter-btn"
             data-tag={tag}
@@ -37,6 +37,30 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
             #{tag}
           </button>
         ))}
+        {allTags.length > 8 && (
+          <>
+            <div id="tags-overflow" style="display: none; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+              {allTags.slice(8).map((tag) => (
+                <button
+                  class="tag-filter-btn"
+                  data-tag={tag}
+                  data-active="false"
+                  aria-pressed="false"
+                  aria-label={`Filter by ${tag}`}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+            <button
+              id="tags-more-btn"
+              aria-expanded="false"
+              style="font-size: 0.7rem; font-weight: 600; font-family: var(--font-mono); background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.2rem 0.45rem; cursor: pointer; color: var(--color-text-muted); transition: background 150ms ease-out, color 150ms ease-out;"
+            >
+              +{allTags.length - 8} more
+            </button>
+          </>
+        )}
       </div>
     </div>
   )}
@@ -80,12 +104,30 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
               {post.data.tags.length > 0 && (
                 <>
                   <span aria-hidden="true" style="color: var(--color-border);">·</span>
-                  <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
-                    {post.data.tags.map((tag) => (
+                  <div class="post-tags-row" style="display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center;">
+                    {post.data.tags.slice(0, 2).map((tag) => (
                       <span style="font-size: 0.7rem; color: var(--color-text-muted); background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.15rem 0.4rem;">
                         #{tag}
                       </span>
                     ))}
+                    {post.data.tags.length > 2 && (
+                      <>
+                        <span class="post-tags-hidden" style="display: none; gap: 0.3rem; flex-wrap: wrap;">
+                          {post.data.tags.slice(2).map((tag) => (
+                            <span style="font-size: 0.7rem; color: var(--color-text-muted); background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.15rem 0.4rem;">
+                              #{tag}
+                            </span>
+                          ))}
+                        </span>
+                        <button
+                          class="post-tags-more"
+                          aria-expanded="false"
+                          style="font-size: 0.65rem; font-weight: 600; font-family: var(--font-mono); background: none; border: 1px solid var(--color-border); border-radius: 4px; padding: 0.15rem 0.35rem; cursor: pointer; color: var(--color-text-muted); transition: background 150ms ease-out, color 150ms ease-out;"
+                        >
+                          +{post.data.tags.length - 2}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -146,5 +188,29 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   document.addEventListener('aethos:lang-change', (e) => {
     activeLang = (e as CustomEvent<string>).detail;
     applyFilters();
+  });
+
+  // Filter bar: expand/collapse overflow tags
+  const tagsMoreBtn = document.getElementById('tags-more-btn') as HTMLButtonElement | null;
+  const tagsOverflow = document.getElementById('tags-overflow') as HTMLElement | null;
+  tagsMoreBtn?.addEventListener('click', () => {
+    const expanded = tagsMoreBtn.getAttribute('aria-expanded') === 'true';
+    tagsOverflow!.style.display = expanded ? 'none' : 'flex';
+    tagsMoreBtn.setAttribute('aria-expanded', String(!expanded));
+    tagsMoreBtn.textContent = expanded ? tagsMoreBtn.dataset.label ?? tagsMoreBtn.textContent : 'less';
+    if (!tagsMoreBtn.dataset.label) tagsMoreBtn.dataset.label = tagsMoreBtn.textContent!;
+    tagsMoreBtn.textContent = expanded ? tagsMoreBtn.dataset.label : 'less';
+  });
+
+  // Per-post tags: expand/collapse
+  document.querySelectorAll<HTMLButtonElement>('.post-tags-more').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      const hidden = btn.previousElementSibling as HTMLElement | null;
+      if (hidden) hidden.style.display = expanded ? 'none' : 'flex';
+      btn.setAttribute('aria-expanded', String(!expanded));
+      const total = parseInt(btn.textContent?.replace('+','') ?? '0') + 2;
+      btn.textContent = expanded ? `+${total - 2}` : 'less';
+    });
   });
 </script>

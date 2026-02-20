@@ -78,6 +78,9 @@ const websiteSchema = {
   </head>
   <body style="background: var(--color-background); color: var(--color-text); min-height: 100vh; display: flex; flex-direction: column;">
 
+    <!-- Star field background -->
+    <canvas id="stars-canvas" aria-hidden="true" style="position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; opacity: 0.7;"></canvas>
+
     <!-- Skip to content (a11y) -->
     <a
       href="#main-content"
@@ -91,10 +94,10 @@ const websiteSchema = {
     <header style="position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--color-border); background: var(--color-header-bg); backdrop-filter: blur(12px);">
       <nav
         aria-label="Main navigation"
-        style="max-width: 800px; margin: 0 auto; padding: 0 1.5rem; height: 60px; display: flex; align-items: center; justify-content: space-between;"
+        style="max-width: 800px; margin: 0 auto; padding: 0 1.5rem; height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;"
       >
         <!-- Breadcrumb logo -->
-        <div style="display: flex; align-items: center; gap: 1.25rem; min-width: 0;">
+        <div style="display: flex; align-items: center; gap: 1.25rem; min-width: 0; flex: 1;">
           <a
             href="https://www.aethostech.com.br"
             target="_blank"
@@ -115,21 +118,9 @@ const websiteSchema = {
           </a>
         </div>
 
-        <!-- Mobile menu button (hidden on desktop via CSS) -->
-        <button
-          id="mobile-menu-btn"
-          aria-label="Open navigation menu"
-          aria-expanded="false"
-          aria-controls="nav-links"
-          style="display: none; background: none; border: 1px solid var(--color-border); border-radius: 6px; padding: 0.3rem 0.5rem; cursor: pointer; color: var(--color-text-muted); font-size: 1rem; line-height: 1; align-items: center; justify-content: center;"
-        >☰</button>
-
-        <!-- Nav links -->
-        <div class="nav-links" id="nav-links">
-          <a href="/" class="nav-link" data-i18n="nav.posts">Posts</a>
-          <a href="/about" class="nav-link" data-i18n="nav.about">About</a>
-          <a href="/rss.xml" class="nav-link" title="Subscribe via RSS" aria-label="RSS Feed">RSS</a>
-          <!-- Language toggle -->
+        <!-- Right controls: lang toggle (always visible) + hamburger (mobile only) -->
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+          <!-- Language toggle — always visible, outside hamburger menu -->
           <button
             id="lang-toggle"
             data-translation-slug={translationSlug || ''}
@@ -141,6 +132,22 @@ const websiteSchema = {
             <span style="opacity: 0.3;">/</span>
             <span id="lang-pt-label" style="transition: color 150ms ease-out;">PT</span>
           </button>
+
+          <!-- Mobile menu button (hidden on desktop via CSS) -->
+          <button
+            id="mobile-menu-btn"
+            aria-label="Open navigation menu"
+            aria-expanded="false"
+            aria-controls="nav-links"
+            style="display: none; background: none; border: 1px solid var(--color-border); border-radius: 6px; padding: 0.3rem 0.5rem; cursor: pointer; color: var(--color-text-muted); font-size: 1rem; line-height: 1; align-items: center; justify-content: center;"
+          >☰</button>
+        </div>
+
+        <!-- Nav links -->
+        <div class="nav-links" id="nav-links">
+          <a href="/" class="nav-link" data-i18n="nav.posts">Posts</a>
+          <a href="/about" class="nav-link" data-i18n="nav.about">About</a>
+          <a href="/rss.xml" class="nav-link" title="Subscribe via RSS" aria-label="RSS Feed">RSS</a>
           <button
             id="theme-toggle"
             aria-label="Switch to light mode"
@@ -161,12 +168,12 @@ const websiteSchema = {
     </header>
 
     <!-- Main content -->
-    <main id="main-content" class="main-content" style="flex: 1; max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem; width: 100%;">
+    <main id="main-content" class="main-content" style="flex: 1; max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem; width: 100%; position: relative; z-index: 1;">
       <slot />
     </main>
 
     <!-- Footer -->
-    <footer style="border-top: 1px solid var(--color-border); padding: 2rem 1.5rem;">
+    <footer style="border-top: 1px solid var(--color-border); padding: 2rem 1.5rem; position: relative; z-index: 1;">
       <div style="max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <span style="font-family: var(--font-display); font-size: 0.875rem; color: var(--color-text-muted);">
           © {new Date().getFullYear()} Aethos Tech
@@ -331,6 +338,172 @@ const websiteSchema = {
         mobileBtn.setAttribute('aria-expanded', String(isOpen));
         mobileBtn.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
       });
+    </script>
+
+    <!-- Stars & shooting stars background -->
+    <script>
+      (function () {
+        const canvas = document.getElementById('stars-canvas') as HTMLCanvasElement | null;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        let W = 0, H = 0;
+
+        function rand(a: number, b: number) { return a + Math.random() * (b - a); }
+        function isLight() { return document.documentElement.classList.contains('light'); }
+
+        // ── Dark mode: stars + shooting stars ──────────────────────────
+        interface Star {
+          x: number; y: number; r: number;
+          alpha: number; aDir: number; aSpd: number;
+        }
+        interface Shooter {
+          x: number; y: number; vx: number; vy: number;
+          trail: { x: number; y: number }[]; trailLen: number;
+          life: number; maxLife: number;
+        }
+
+        const stars: Star[] = [];
+        const shooters: Shooter[] = [];
+        let nextShot = 0;
+
+        function initStars() {
+          stars.length = 0;
+          for (let i = 0; i < 160; i++) {
+            stars.push({ x: rand(0,W), y: rand(0,H), r: rand(0.4,1.7),
+              alpha: rand(0.2,1), aDir: Math.random()>.5?1:-1, aSpd: rand(0.002,0.008) });
+          }
+        }
+
+        function spawnShooter() {
+          const a = rand(Math.PI*.1, Math.PI*.4), spd = rand(6,14);
+          shooters.push({ x: rand(0,W*.8), y: rand(0,H*.3), vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+            trail: [], trailLen: rand(80,180), life: 0, maxLife: rand(40,70) });
+        }
+
+        function drawDark(ts: number) {
+          for (const s of stars) {
+            s.alpha += s.aDir * s.aSpd;
+            if (s.alpha>=1){s.alpha=1;s.aDir=-1;} if (s.alpha<=0.1){s.alpha=0.1;s.aDir=1;}
+            ctx!.beginPath(); ctx!.arc(s.x,s.y,s.r,0,Math.PI*2);
+            ctx!.fillStyle = `rgba(255,255,255,${s.alpha*.85})`; ctx!.fill();
+          }
+          if (ts > nextShot && shooters.length < 3) { spawnShooter(); nextShot = ts + rand(2500,6000); }
+          for (let i = shooters.length-1; i>=0; i--) {
+            const s = shooters[i];
+            s.trail.push({x:s.x, y:s.y}); s.x+=s.vx; s.y+=s.vy; s.life++;
+            const fade = 1 - s.life/s.maxLife;
+            const t0 = Math.max(0, s.trail.length - Math.round(s.trailLen/4));
+            if (s.trail.length>1) {
+              const tail=s.trail[t0];
+              const g = ctx!.createLinearGradient(tail.x,tail.y,s.x,s.y);
+              g.addColorStop(0,`rgba(220,240,255,0)`); g.addColorStop(1,`rgba(220,240,255,${fade*.9})`);
+              ctx!.beginPath(); ctx!.moveTo(tail.x,tail.y);
+              for (let j=t0+1;j<s.trail.length;j++) ctx!.lineTo(s.trail[j].x,s.trail[j].y);
+              ctx!.lineTo(s.x,s.y); ctx!.strokeStyle=g; ctx!.lineWidth=1.5; ctx!.stroke();
+            }
+            if (s.life>=s.maxLife||s.x>W+100||s.y>H+100) shooters.splice(i,1);
+          }
+        }
+
+        // ── Light mode: floating dust motes / pollen ───────────────────
+        interface Mote {
+          x: number; y: number; r: number;
+          vx: number; vy: number;
+          alpha: number; aDir: number; aSpd: number;
+          hue: number;
+        }
+
+        const motes: Mote[] = [];
+
+        function initMotes() {
+          motes.length = 0;
+          // warm golden/amber/lavender palette
+          const hues = [40, 50, 200, 270, 30, 60];
+          for (let i = 0; i < 90; i++) {
+            motes.push({
+              x: rand(0,W), y: rand(0,H),
+              r: rand(1.5, 4.5),
+              vx: rand(-0.12, 0.12), vy: rand(-0.18, -0.04), // drift upward gently
+              alpha: rand(0.05, 0.35),
+              aDir: Math.random()>.5?1:-1, aSpd: rand(0.001,0.004),
+              hue: hues[Math.floor(Math.random()*hues.length)] + rand(-15,15),
+            });
+          }
+        }
+
+        function drawLight() {
+          for (const m of motes) {
+            // drift
+            m.x += m.vx; m.y += m.vy;
+            // wrap around
+            if (m.x < -10) m.x = W+10; if (m.x > W+10) m.x = -10;
+            if (m.y < -10) { m.y = H+10; m.x = rand(0,W); }
+            // pulse
+            m.alpha += m.aDir * m.aSpd;
+            if (m.alpha >= 0.35){m.alpha=0.35;m.aDir=-1;} if (m.alpha<=0.03){m.alpha=0.03;m.aDir=1;}
+
+            // soft glowing dot with radial gradient
+            const g = ctx!.createRadialGradient(m.x,m.y,0, m.x,m.y,m.r*2.5);
+            g.addColorStop(0, `hsla(${m.hue},70%,55%,${m.alpha})`);
+            g.addColorStop(1, `hsla(${m.hue},70%,55%,0)`);
+            ctx!.beginPath(); ctx!.arc(m.x,m.y,m.r*2.5,0,Math.PI*2);
+            ctx!.fillStyle = g; ctx!.fill();
+          }
+        }
+
+        // ── Canvas opacity cross-fade on theme switch ──────────────────
+        let canvasOpacity = 1;
+        let fadeTarget = 1;
+        let fadeFrom = 1;
+        let fadeProgress = 1;
+        const FADE_DUR = 30; // frames
+
+        function startFade() {
+          fadeFrom = canvasOpacity;
+          fadeTarget = 0;
+          fadeProgress = 0;
+        }
+        function completeFade() {
+          // reinit for new mode, then fade back in
+          if (isLight()) initMotes(); else initStars();
+          shooters.length = 0;
+          fadeFrom = 0; fadeTarget = 1; fadeProgress = 0;
+        }
+
+        // Watch for theme class changes
+        const observer = new MutationObserver(() => startFade());
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+        // ── Main loop ──────────────────────────────────────────────────
+        function resize() {
+          W = canvas!.width = window.innerWidth;
+          H = canvas!.height = window.innerHeight;
+          if (isLight()) initMotes(); else initStars();
+        }
+
+        function draw(ts: number) {
+          ctx!.clearRect(0, 0, W, H);
+
+          // Manage cross-fade
+          if (fadeProgress < FADE_DUR) {
+            fadeProgress++;
+            const t = fadeProgress / FADE_DUR;
+            canvasOpacity = fadeFrom + (fadeTarget - fadeFrom) * (t < 0.5 ? 2*t*t : -1+(4-2*t)*t);
+            canvas!.style.opacity = String(canvasOpacity * 0.75);
+            if (fadeProgress === FADE_DUR && fadeTarget === 0) completeFade();
+          }
+
+          if (isLight()) drawLight(); else drawDark(ts);
+
+          requestAnimationFrame(draw);
+        }
+
+        resize();
+        window.addEventListener('resize', () => { resize(); });
+        requestAnimationFrame(draw);
+      })();
     </script>
   </body>
 </html>

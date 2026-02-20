@@ -25,17 +25,17 @@
 
 /* ── Light mode overrides ── */
 html.light {
-  --color-background: #fafafa;
-  --color-surface:    #f0f0f0;
-  --color-muted:      #e8e8e8;
-  --color-secondary:  #e0e0e0;
-  --color-border:     #d0d0d0;
+  --color-background: hsl(40 20% 88%);
+  --color-surface:    hsl(40 15% 82%);
+  --color-muted:      hsl(40 12% 76%);
+  --color-secondary:  hsl(40 10% 72%);
+  --color-border:     hsl(40 10% 65%);
   --color-text:       hsl(0 0% 8%);
-  --color-text-muted: hsl(0 0% 40%);
-  --color-text-body:  hsl(0 0% 30%);
+  --color-text-muted: hsl(0 0% 35%);
+  --color-text-body:  hsl(0 0% 25%);
   --color-primary:    hsl(0 0% 5%);
   --color-glow:       hsl(0 0% 0% / 0.08);
-  --color-header-bg:  hsl(0 0% 98% / 0.85);
+  --color-header-bg:  hsl(40 20% 88% / 0.85);
 }
 
 /* ── Base ── */
@@ -47,6 +47,22 @@ html {
   -webkit-font-smoothing: antialiased;
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
+  transition: background-color 500ms ease, color 300ms ease;
+}
+
+body {
+  transition: background-color 500ms ease, color 300ms ease;
+}
+
+/* Smooth transitions for all major UI elements on theme switch */
+header, main, footer, nav, article, section,
+.nav-link, button, a, pre, code, blockquote,
+[style*="background"], [style*="border"] {
+  transition:
+    background-color 400ms ease,
+    border-color 400ms ease,
+    color 300ms ease,
+    box-shadow 400ms ease !important;
 }
 
 html.light {
