@@ -76,11 +76,11 @@ const articleSchema = {
   <article>
     <!-- Post Header -->
     <header style="margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--color-border);">
-      <h1 style="font-size: 2rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem; color: var(--color-text); letter-spacing: -0.02em;">
+      <h1 style="font-size: 2rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem; color: var(--color-text); letter-spacing: -0.02em;" class="post-h1">
         {post.data.title}
       </h1>
 
-      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
+      <div class="post-meta" style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
         <time datetime={isoDate} style="color: var(--color-text-muted); font-size: 0.875rem;">
           {formattedDate}
         </time>
@@ -143,12 +143,12 @@ const articleSchema = {
         </ol>
         <div style="display: flex; justify-content: space-between; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
           {prevPost ? (
-            <a href={`/blog/${prevPost.slug}`} class="nav-link" style="font-size: 0.875rem;" rel="prev">
+            <a href={`/blog/${prevPost.slug}`} class="nav-link series-nav-link" style="font-size: 0.875rem;" rel="prev">
               ← {prevPost.data.title}
             </a>
           ) : <span />}
           {nextPost ? (
-            <a href={`/blog/${nextPost.slug}`} class="nav-link" style="font-size: 0.875rem; text-align: right;" rel="next">
+            <a href={`/blog/${nextPost.slug}`} class="nav-link series-nav-link" style="font-size: 0.875rem; text-align: right;" rel="next">
               {nextPost.data.title} →
             </a>
           ) : <span />}
