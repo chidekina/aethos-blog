@@ -1,0 +1,215 @@
+---
+title: "Roteamento de Modelos de IA em 4 Camadas: Dados Reais de Custo Após 3 Meses"
+description: "Como rotear tarefas para Ollama, Haiku, Sonnet e Opus reduziu meu gasto com IA em ~60% sem sacrificar qualidade — com números reais."
+date: 2026-02-23
+lang: pt
+translationSlug: 2026-02-23-model-routing-cost-data
+tags: [aria, ai, cost, llm, devtools]
+series: aria-progress
+draft: false
+---
+
+Nos primeiros dois meses de ARIA, usei Claude Sonnet para tudo. Funcionava ótimo. Também era burrice.
+
+Não burrice no sentido de "resultados ruins" — o Sonnet é excelente. Burrice no sentido de "usar uma serra circular para cortar pão". Quando a ARIA escreve uma mensagem de commit, ela não precisa de um modelo de ponta raciocinar sobre problemas em múltiplas etapas. Ela precisa ler um diff e produzir uma linha. Um modelo que custa 15x menos faz isso muito bem.
+
+Comecei a rastrear custos em novembro. Em janeiro tinha dados suficientes para construir um sistema de roteamento. Aqui está o que encontrei.
+
+## O Problema de Usar Um Único Modelo para Tudo
+
+Antes do roteamento, meu gasto médio mensal com a API do Claude era de cerca de $28–32. Parece pouco em termos absolutos, mas considere o que estava comprando:
+
+- ~40% do gasto em mensagens de commit, descrições de PR e resumos
+- ~25% em briefings matinais/noturnos
+- ~20% em tarefas reais de programação
+- ~15% em discussões de arquitetura e depuração complexa
+
+As duas primeiras categorias — mensagens de commit e briefings — são tarefas de alto volume e baixa complexidade. Rodam diariamente, às vezes várias vezes por dia. Precisam de boa formatação e saída coerente, mas não de raciocínio profundo. Eu estava pagando preço de Sonnet em tarefas que um modelo muito mais barato executa igualmente bem.
+
+## O Sistema de 4 Camadas
+
+Cheguei a quatro camadas depois de experimentar com três (sem modelo local inicialmente):
+
+| Camada | Modelo | Custo por 1M tokens (entrada/saída) | Usado para |
+|------|-------|----------------------------|---------|
+| 0 | Ollama `llama3.2:3b` (local) | **Gratuito** | Commits, resumos, traduções, explicações simples |
+| 1 | Claude Haiku 3.5 | $0,80 / $4,00 | Consultas rápidas, classificação sim/não, Q&A curto |
+| 2 | Claude Sonnet (padrão) | $3,00 / $15,00 | Programação, features, correção de bugs, briefings |
+| 3 | Claude Opus | $15,00 / $75,00 | Arquitetura, auditorias de segurança, refatorações complexas |
+
+A Camada 0 é local, roda na minha máquina, não custa nada por token. A limitação é qualidade e janela de contexto (llama3.2:3b tem 8k de contexto). A Camada 3 quase nunca roda — a invoco explicitamente para sessões específicas, nunca automaticamente.
+
+## Regras de Roteamento
+
+O roteamento vive em dois lugares: a ferramenta MCP `aria_route_query` (para tarefas iniciadas pela ARIA) e um hook `model-suggest` pre-tool no Claude Code (para sessões interativas).
+
+**Camada 0 — Ollama local:**
+
+- Mensagens de commit (lê diff, escreve mensagem)
+- Descrições de PR (lê commits, escreve resumo)
+- Resumindo um arquivo ou conjunto de logs
+- Traduzindo texto curto (PT ↔ EN)
+- Explicando o que um comando faz
+- Categorizando a descrição de uma transação no Neutron
+
+O teste: "Um estagiário esperto conseguiria fazer isso com 30 segundos de leitura?" Se sim, Camada 0.
+
+**Camada 1 — Haiku:**
+
+- "Isso é um problema de segurança ou só um aviso?"
+- Geração rápida de regex
+- Classificar uma mensagem do WhatsApp (pedido de tarefa? pergunta? spam?)
+- Verificar se uma string corresponde a um padrão
+- Gerar um template curto a partir de um formato conhecido
+
+O teste: "Isso exige raciocínio real, ou apenas reconhecimento de padrões?" O Haiku é surpreendentemente bom em reconhecimento de padrões em entradas curtas.
+
+**Camada 2 — Sonnet (padrão):**
+
+Tudo que não se encaixa na Camada 0 ou 1 e não está na Camada 3. É o cavalo de batalha. Implementação de features, depuração, refatoração, escrita de testes, o briefing matinal (que exige sintetizar 8 resultados de chamadas de ferramentas em saída coerente), revisão de código.
+
+**Camada 3 — Opus:**
+
+- Decisões de arquitetura de sistema onde preciso pensar bem nos trade-offs
+- Auditorias de segurança (revisando fluxos de autenticação, verificando vulnerabilidades de injeção)
+- Refatorações complexas que tocam muitos arquivos e precisam raciocinar sobre estado em toda a base de código
+- Qualquer coisa onde já tentei com o Sonnet e ele está ficando confuso
+
+Invoco o Opus explicitamente, nunca automaticamente. É uma escolha deliberada, como chamar um consultor sênior em vez do seu dev regular.
+
+## A Ferramenta aria_route_query
+
+Para as próprias tarefas da ARIA (não sessões interativas do Claude Code), o roteamento é tratado pela ferramenta MCP `aria_route_query`. Ela classifica uma tarefa antes de decidir qual modelo usar:
+
+```typescript
+server.tool(
+  "aria_route_query",
+  "Classify a task and suggest the appropriate model tier (0-3). Use before delegating work to determine cost-efficient routing.",
+  {
+    task: z.string().describe("Description of the task to classify"),
+    context_size: z.number().optional().describe("Approximate token count of context"),
+  },
+  async ({ task, context_size }) => {
+    const tier = classifyTask(task, context_size ?? 0);
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          tier,
+          model: TIER_MODELS[tier],
+          reasoning: TIER_REASONING[tier],
+        })
+      }]
+    };
+  }
+);
+
+function classifyTask(task: string, contextSize: number): 0 | 1 | 2 | 3 {
+  const lower = task.toLowerCase();
+
+  // Tier 0: free local
+  if (contextSize < 4000 && (
+    lower.includes("commit") ||
+    lower.includes("summarize") ||
+    lower.includes("translate") ||
+    lower.includes("describe this") ||
+    lower.includes("explain what")
+  )) return 0;
+
+  // Tier 1: cheap classification
+  if (contextSize < 2000 && (
+    lower.includes("classify") ||
+    lower.includes("is this") ||
+    lower.includes("categorize") ||
+    lower.includes("yes or no")
+  )) return 1;
+
+  // Tier 3: expensive
+  if (
+    lower.includes("architecture") ||
+    lower.includes("security audit") ||
+    lower.includes("refactor entire") ||
+    lower.includes("design system")
+  ) return 3;
+
+  // Default: Sonnet
+  return 2;
+}
+```
+
+Isso roda antes de a ARIA delegar qualquer sub-tarefa a um modelo. A própria classificação é lógica pura — sem chamada de LLM para o roteador, o que derrotaria o propósito.
+
+## Números Reais: Antes vs Depois
+
+Gasto mensal com API, aproximado:
+
+| Mês | Gasto | Notas |
+|-------|-------|-------|
+| Outubro (baseline) | $31 | Só Sonnet, sem roteamento |
+| Novembro | $26 | Comecei a rotear commits para o Haiku |
+| Dezembro | $19 | Adicionei Ollama para tarefas locais |
+| Janeiro | $13 | Roteamento totalmente ajustado, ~40% de desvio para o Ollama |
+
+Isso é uma redução de aproximadamente 58%. As tarefas que me importam — sessões de programação, trabalho de arquitetura — ainda rodam no Sonnet ou Opus. As tarefas de alta frequência e baixa complexidade (commits, resumos de briefing, categorização de transações) migraram para o Ollama.
+
+Para colocar o impacto do Ollama em termos concretos: a ARIA escreve uma mensagem de commit para cada commit significativo que faço. Em janeiro foram cerca de 85 commits em todos os projetos. No preço do Sonnet, isso seria talvez $0,80–$1,20 só em commits. No Ollama: $0,00.
+
+## Descobertas Surpreendentes
+
+**O Haiku lida com mais do que eu esperava.** Comecei com o Haiku só para classificação sim/não. Descobriu-se que ele lida bem com resumos de contexto curto também — bem o suficiente para mover tarefas de "resuma este changelog" do Sonnet para o Haiku. A saída é um pouco menos polida, mas totalmente utilizável.
+
+**A qualidade do Ollama para commits é suficiente.** Esperava me contorcer com as mensagens de commit do `llama3.2:3b`. Na maior parte, não me contorço. O modelo lê o diff, entende o tipo de mudança, e escreve algo como "fix: correct null check in user session handler." É tudo que preciso. Revisei 30 delas; 27 estavam utilizáveis sem edição.
+
+**O Opus é raro, mas insubstituível.** Usei o Opus talvez 8 vezes em três meses. Três delas foram relacionadas a segurança: revisando o fluxo de autenticação no Menthos, auditando tratamento de webhooks, verificando a lógica de consumo de créditos para race conditions. Em todos os três casos, o Opus pegou coisas que o Sonnet não pegou. O valor de $0,50–$1,00 por sessão vale para trabalho de alto risco.
+
+**O briefing é mais complicado do que parece.** O briefing matinal sintetiza 8+ resultados de chamadas de ferramentas. Tentei fazer downgrade para o Haiku. A saída estava tecnicamente correta, mas parecia mecânica — listava fatos sem priorização ou narrativa. O Sonnet adiciona uma camada de julgamento ("o orçamento de Software atingiu 82%, vale ficar de olho") que o Haiku não tem. Briefings ficam no Sonnet.
+
+## O Hook model-suggest
+
+Para sessões interativas do Claude Code, uso um hook pre-tool que dispara antes da primeira chamada ao modelo e sugere uma camada com base no que eu digitei:
+
+```bash
+#!/bin/bash
+# ~/.claude/hooks/model-suggest.sh
+# Runs before Claude Code starts a session
+
+INPUT="$1"
+INPUT_LOWER=$(echo "$INPUT" | tr '[:upper:]' '[:lower:]')
+
+suggest_tier() {
+  if echo "$INPUT_LOWER" | grep -qE "commit|summary|summarize|translate|explain what"; then
+    echo "0 (Ollama — free local)"
+  elif echo "$INPUT_LOWER" | grep -qE "architecture|security audit|design system"; then
+    echo "3 (Opus — expensive, confirm?)"
+  else
+    echo "2 (Sonnet — default)"
+  fi
+}
+
+TIER=$(suggest_tier)
+echo "[ARIA] Suggested tier: $TIER" >&2
+```
+
+Isso não força um modelo. Imprime uma sugestão no stderr que posso seguir — ou ignorar. Na maior parte do tempo já estou usando o modelo certo por hábito, mas é um empurrão útil quando estou prestes a perguntar algo trivial.
+
+## Trade-offs
+
+**Latência do Ollama.** O llama3.2:3b na minha máquina (Ryzen 5, 32GB RAM, sem GPU dedicada) leva 3–8 segundos para uma mensagem de commit. O Sonnet via API leva ~1–2 segundos com a rede. Para commits está ótimo — não fico olhando para o terminal esperando. Para tarefas interativas seria inaceitável.
+
+**Limitações da janela de contexto.** A janela de 8k do Ollama significa que não posso enviar diffs grandes ou arquivos longos. Qualquer coisa acima de ~3k tokens é automaticamente direcionada para Haiku ou Sonnet. A verificação de `context_size` em `classifyTask` cuida disso.
+
+**Cold start no Ollama.** A primeira chamada após reiniciar o sistema leva ~15 segundos para carregar o modelo. Depois ele está aquecido e rápido. Tenho o Ollama configurado para iniciar no boot, então o aquecimento acontece antes de precisar dele.
+
+**O roteamento não é perfeito.** O classificador é baseado em palavras-chave, não em uma chamada de LLM. Comete erros — às vezes roteando uma pergunta "explain" complexa para o Ollama quando deveria ir para o Sonnet. Identifico esses casos e corrijo o classificador. Após três meses está bom o suficiente para que eu raramente note os erros de roteamento.
+
+## A Lição Real
+
+Usar um único modelo para tudo é o padrão preguiçoso e caro. A lógica de roteamento não é complicada — algumas centenas de linhas de Node.js e um shell script. A economia se acumula diariamente porque as tarefas de alta frequência (commits, resumos, briefings) são exatamente as que você pode desviar pelo menor custo.
+
+O modelo mental que sugiro: pense na sua distribuição de tarefas. Se você faz desenvolvimento assistido por IA todos os dias, uma grande fração das suas chamadas provavelmente é de baixa complexidade. Roteie essas para modelos gratuitos ou baratos. Reserve a capacidade cara de raciocínio para problemas que realmente precisam dela.
+
+Você não precisa de um sistema sofisticado de roteamento com ML. Classificação por palavras-chave mais comprimento de contexto é suficiente para obter 80% do valor. Comece por aí.
+
+---
+
+*Próximo na série: [O Problema da Fila Offline: Construindo Workflows de IA Resilientes](/blog/2026-02-24-fila-offline)*

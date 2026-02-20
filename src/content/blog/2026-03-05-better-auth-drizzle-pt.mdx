@@ -1,0 +1,140 @@
+---
+title: "Better Auth + Drizzle: O Problema de Schema Que Quebra Tudo"
+description: "Recebendo 'model user not found' com Better Auth e Drizzle? Não passe um schema seletivo ao drizzleAdapter. Entenda o motivo."
+date: 2026-03-05
+lang: pt
+translationSlug: 2026-03-05-better-auth-drizzle-gotcha
+tags: [til, better-auth, drizzle, nextjs]
+draft: false
+---
+
+O erro aparece em tempo de execução, não em tempo de build. Seu app compila sem problemas, as migrations rodaram, o banco tem as tabelas certas — e aí você bate em um endpoint de autenticação e recebe:
+
+```
+Error: model user not found
+```
+
+Aqui está o que está acontecendo e a correção de uma linha.
+
+## O Cenário
+
+Stack: Next.js 16, Turbopack, Better Auth, Drizzle ORM, Neon (Postgres serverless).
+
+A documentação do Better Auth mostra como configurar o adaptador do Drizzle. Fica assim:
+
+```ts
+// src/lib/auth/index.ts
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+    schema: schema, // <-- aqui está o problema
+  }),
+  emailAndPassword: { enabled: true },
+});
+```
+
+Parece razoável. Você está passando seu schema para que o adaptador conheça suas tabelas. Faz sentido, certo?
+
+## O Que Está Acontecendo de Verdade
+
+Quando você passa `schema` ao `drizzleAdapter`, está passando *o seu* schema — as tabelas que você definiu para a sua aplicação. O Better Auth também precisa das suas próprias tabelas: `user`, `session`, `account` e `verification`. Essas são criadas pelas ferramentas de migration do Better Auth e devem estar no seu banco.
+
+O problema: se o seu arquivo de schema só exporta as tabelas da sua aplicação e não as tabelas do Better Auth, o adaptador não consegue encontrá-las. Ele procura por `user` no objeto de schema que você passou, não encontra, e lança `model user not found`.
+
+A mensagem de erro descreve o sintoma, mas não dá nenhuma pista sobre a causa. Nada avisa: "hey, seu schema não inclui as tabelas do próprio Better Auth."
+
+## A Solução
+
+Não passe `schema`.
+
+```ts
+// src/lib/auth/index.ts
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { db } from '@/lib/db';
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+    // Sem schema: aqui
+  }),
+  emailAndPassword: { enabled: true },
+});
+```
+
+Quando você omite `schema`, o `drizzleAdapter` cai para `db._.fullSchema` — o schema completo que o Drizzle constrói internamente, que inclui tudo: suas tabelas *e* as tabelas do Better Auth (desde que elas tenham sido geradas via `npx better-auth generate` e incluídas no seu schema Drizzle).
+
+## Antes e Depois
+
+**Antes (quebrado):**
+
+```ts
+import * as schema from '@/lib/db/schema';
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+    schema: schema,
+  }),
+  // ...
+});
+```
+
+**Depois (funcionando):**
+
+```ts
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: 'pg',
+  }),
+  // ...
+});
+```
+
+Essa é a mudança inteira. Duas linhas removidas.
+
+## Garantindo Que as Tabelas do Better Auth Estejam no Seu Schema
+
+Para que `db._.fullSchema` inclua as tabelas do Better Auth, você precisa:
+
+1. Rodar `npx better-auth generate` para gerar o arquivo de schema de autenticação
+2. Importá-lo na sua config do Drizzle para que faça parte do schema que o Drizzle conhece
+
+```ts
+// drizzle.config.ts
+import { defineConfig } from 'drizzle-kit';
+
+export default defineConfig({
+  schema: ['./src/lib/db/schema.ts', './src/lib/db/auth-schema.ts'],
+  out: './drizzle',
+  dialect: 'postgresql',
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+});
+```
+
+O arquivo `auth-schema.ts` é gerado pelo Better Auth e contém as definições das tabelas `user`, `session`, `account` e `verification`. Inclua-o no glob do seu schema. Não o mescle no seu `schema.ts` principal — mantenha-o separado para que o Better Auth possa regerá-lo sem conflitos.
+
+## Problema Relacionado: Formato do BETTER_AUTH_SECRET
+
+Enquanto você configura o Better Auth, mais uma coisa que costuma pegar as pessoas: o `BETTER_AUTH_SECRET` deve ser gerado com `openssl rand -hex 32`, não com `openssl rand -base64 32`.
+
+A variante base64 produz caracteres como `+`, `/` e `=`. Esses caracteres causam problemas de parsing em certos ambientes e podem quebrar operações de autenticação silenciosamente. Hex é seguro:
+
+```bash
+openssl rand -hex 32
+# gera: a1b2c3d4e5f6...  (64 chars hex, sem caracteres especiais)
+```
+
+## TIL
+
+- `drizzleAdapter` com `schema:` só enxerga as tabelas que você passar explicitamente — as tabelas do próprio Better Auth não estarão lá a menos que você as inclua
+- Omitir `schema:` faz o adaptador usar `db._.fullSchema`, que é quase sempre o que você quer
+- O erro `model user not found` significa que o adaptador não encontrou uma definição de tabela, não que a tabela está faltando no banco
+- Gere o `BETTER_AUTH_SECRET` com `openssl rand -hex 32`, não com `-base64`

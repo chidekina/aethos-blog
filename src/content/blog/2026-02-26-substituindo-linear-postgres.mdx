@@ -1,0 +1,170 @@
+---
+title: "Por Que Substituí o Linear por uma Tabela Postgres"
+description: "O Linear é um software excelente. Para um desenvolvedor solo que quer tarefas consultáveis por IA integradas com todo o resto, ter os dados sob controle importa mais do que a interface."
+date: 2026-02-26
+lang: pt
+translationSlug: 2026-02-26-replaced-linear-postgres
+tags: [aria, devtools, productivity, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+O Linear é genuinamente bom. Os atalhos de teclado são excelentes, a visualização de roadmap é bonita, a integração com GitHub é bem feita. Se você trabalha em equipe, o Linear provavelmente é a ferramenta certa.
+
+Eu não trabalho em equipe. Trabalho sozinho, em 6-7 projetos simultaneamente, com uma assistente de IA que precisa consultar minhas tarefas de forma programática. Para esse caso de uso, uma tabela Postgres é melhor que o Linear.
+
+Veja por que fiz a troca, o que construí e o que abri mão.
+
+## O Problema com o Linear (para Devs Solo)
+
+O ponto forte do Linear é a interface. O kanban, o roadmap, as prioridades, as notificações — tudo muito bem projetado para humanos olhando uma tela. Mas essa mesma interface vira um problema quando você quer que uma IA trabalhe com suas tarefas.
+
+Para extrair dados do Linear você tem duas opções: a API GraphQL (complexa, com rate limit, requer setup de OAuth para cada integração) ou webhooks (orientado a eventos, ótimo para tempo real, mas não para consultas ad-hoc). Nenhum dos dois é ideal para "mostre todas as minhas tarefas com a tag `rastro-pop` que estão atrasadas junto com a data do último commit git desse projeto."
+
+O outro problema era o custo. O Linear cobra por assento, e mesmo no tier individual o preço pressupõe que você aproveita os recursos de equipe. Eu não aproveitava. Estava pagando por uma interface polida para armazenar dados que não conseguia consultar com facilidade.
+
+## O Schema do Hub
+
+O substituto é uma tabela `tasks` no Neon Postgres, exposta via a Hub API. Aqui está o schema:
+
+```sql
+CREATE TABLE tasks (
+  id          SERIAL PRIMARY KEY,
+  title       TEXT NOT NULL,
+  description TEXT,
+  priority    TEXT NOT NULL DEFAULT 'MEDIUM'
+              CHECK (priority IN ('URGENT', 'HIGH', 'MEDIUM', 'LOW')),
+  status      TEXT NOT NULL DEFAULT 'TODO'
+              CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED')),
+  project_name TEXT,
+  due_date    DATE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_project ON tasks(project_name);
+CREATE INDEX idx_tasks_priority ON tasks(priority);
+```
+
+Só isso. Sem foreign keys para usuários, sem hierarquia de times, sem workspaces. É uma tabela de tarefas para uma pessoa.
+
+A Hub API envolve tudo isso com endpoints REST simples construídos nas rotas de API do Next.js:
+
+```typescript
+// app/api/tasks/route.ts
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get("status");
+  const project = searchParams.get("project");
+  const priority = searchParams.get("priority");
+
+  const conditions = [];
+  if (status) conditions.push(eq(tasks.status, status));
+  if (project) conditions.push(eq(tasks.projectName, project));
+  if (priority) conditions.push(eq(tasks.priority, priority));
+
+  const result = await db
+    .select()
+    .from(tasks)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(tasks.createdAt));
+
+  return Response.json({ tasks: result });
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const parsed = createTaskSchema.parse(body);
+
+  const [task] = await db.insert(tasks).values(parsed).returning();
+  return Response.json({ task }, { status: 201 });
+}
+```
+
+## Como a ARIA Usa Isso
+
+A ARIA tem três ferramentas MCP para gerenciamento de tarefas: `aria_create_task`, `aria_list_tasks` e `aria_update_task`. São wrappers simples sobre a Hub API.
+
+```typescript
+// MCP tool: aria_create_task
+{
+  name: "aria_create_task",
+  description: "Create a new task in the Hub",
+  inputSchema: {
+    type: "object",
+    properties: {
+      title: { type: "string" },
+      description: { type: "string" },
+      priority: { enum: ["URGENT", "HIGH", "MEDIUM", "LOW"] },
+      project_name: { type: "string" },
+      due_date: { type: "string", format: "date" },
+    },
+    required: ["title"],
+  },
+}
+```
+
+Durante uma sessão no Claude Code, posso dizer "cria uma tarefa para refatorar o middleware de auth no rastro-pop, alta prioridade, prazo sexta-feira" e a ARIA chama `aria_create_task` diretamente. Sem copiar e colar em outro app, sem troca de contexto.
+
+## A Vantagem Real: Consultas Entre Tabelas
+
+Essa é a parte que o Linear não consegue fazer. Como as tarefas vivem no mesmo banco de dados Postgres que briefings, insights e metadados de projetos, posso consultar tudo junto:
+
+```sql
+-- Todas as tarefas de projetos com commit nos últimos 3 dias
+SELECT t.*
+FROM tasks t
+JOIN project_activity pa ON pa.project_name = t.project_name
+WHERE pa.last_commit_at > NOW() - INTERVAL '3 days'
+  AND t.status = 'TODO'
+ORDER BY t.priority, t.created_at;
+
+-- Tarefas atrasadas de alta prioridade com insights relacionados
+SELECT t.title, t.due_date, i.content as related_insight
+FROM tasks t
+LEFT JOIN insights i ON i.project_name = t.project_name
+WHERE t.due_date < NOW()
+  AND t.priority IN ('URGENT', 'HIGH')
+  AND t.status NOT IN ('DONE', 'CANCELLED');
+```
+
+A ARIA executa consultas assim durante os briefings diários. "O que está atrasado?" vira uma query SQL, não uma chamada à API do Linear passando por três camadas de OAuth.
+
+## Integração com WhatsApp
+
+Como as tarefas estão no meu banco de dados e expostas via uma API limpa, adicionar criação de tarefa pelo WhatsApp foi trivial:
+
+```
+tarefa: revisar o PR do rastro-pop antes de amanhã
+→ POST /api/tasks { title: "revisar o PR do rastro-pop", due_date: "2026-02-27", priority: "MEDIUM" }
+→ "Task created: #142 — revisar o PR do rastro-pop"
+```
+
+Sem cliente de API do Linear, sem fluxo OAuth, sem configuração de webhook. Só um fetch para a minha própria API.
+
+## O Que Abri Mão
+
+Vou ser claro sobre as trocas:
+
+**Colaboração em equipe.** Se você trabalha com outros desenvolvedores, os recursos multi-usuário do Linear são genuinamente valiosos. Atribuições, menções, notificações — nada disso existe na minha tabela.
+
+**Integração com GitHub.** A vinculação automática de issue a PR do Linear é excelente. Agora atualizo o status das tarefas manualmente quando fecho PRs, o que leva uns 10 segundos mas é um passo atrás.
+
+**Roadmaps e ciclos.** A visualização de roadmap do Linear é bonita. Minha versão é uma query SQL com filtro de `due_date`.
+
+**Notificações refinadas.** O Linear notifica de forma inteligente. O meu é um briefing diário que menciona itens atrasados.
+
+Para um desenvolvedor solo que roda 6 projetos simultaneamente, nenhuma dessas trocas importa muito. Colaboração é assíncrona via PRs no GitHub. Roadmaps estão na minha cabeça e em documentos. Notificações estão no meu briefing.
+
+## O Argumento da Propriedade
+
+Existe uma razão mais profunda além das técnicas: quero ter controle sobre os meus dados de tarefas.
+
+Quando o Linear cai (e já caiu), minhas tarefas ficam inacessíveis. Quando mudam o preço, eu pago ou migro. Quando quero construir uma visualização ou integração customizada, fico limitado pela API deles.
+
+Minha tabela Postgres não cai. O preço não muda. O schema é meu para modificar. Quando a ARIA precisa de um campo novo — por exemplo, uma coluna `estimated_hours` — adiciono com uma migration e as ferramentas MCP são atualizadas em 20 minutos.
+
+Para uma equipe, essa troca vai na direção oposta. O overhead operacional de self-hosting supera a flexibilidade. Mas para um desenvolvedor solo que já roda um VPS e um banco de dados Neon? O custo marginal de uma tabela de tarefas é zero.
+
+O Linear é um software excelente. Recomendo para qualquer equipe. Mas para construir uma camada de produtividade pessoal consultável por IA, ter os dados sob controle importa mais do que a interface.

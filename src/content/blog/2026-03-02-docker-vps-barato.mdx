@@ -1,0 +1,158 @@
+---
+title: "Rodando 7 Containers Docker por Menos de R$ 80/mês"
+description: "Minha stack de produção completa — Hub, Neutron, Portainer, vários servidores MCP — em um único VPS Contabo. O que rodo, como mantenho o custo baixo e o que faria diferente."
+date: 2026-03-02
+lang: pt
+translationSlug: 2026-03-02-docker-cheap-vps
+tags: [docker, devops, indie-hacking, infrastructure]
+draft: false
+---
+
+Quando conto para outros indie hackers que toda a minha stack de produção self-hosted custa menos de R$ 80/mês, a reação costuma ser ceticismo. Sete containers. Uma instância Postgres. Uma API interna. Vários servidores MCP. Portainer para gerenciamento. Tudo rodando, tudo monitorado, tudo acessível para a ARIA fazer health checks automatizados.
+
+Aqui está o detalhamento real.
+
+## O VPS: Contabo
+
+Rodo tudo em um VPS da Contabo — 4 vCPUs, 8GB RAM, 200GB SSD NVMe, 32TB de tráfego. Custo atual: em torno de R$ 75/mês na cotação atual de BRL/EUR.
+
+Por que Contabo especificamente? Custo-benefício. Para infra europeia, não encontrei nada parecido nessa faixa de preço. O painel de controle é feio, o suporte é lento e o onboarding é datado. Nada disso importa depois que está rodando — e sempre está. Tive menos de 30 minutos de downtime não planejado em 12 meses.
+
+Alternativas que considerei: DigitalOcean (2-3x mais caro para specs equivalentes), Hetzner (excelente, mas um pouco mais caro), Oracle Free Tier (de graça de verdade, mas limitado e pouco confiável para produção). A Contabo vence no custo puro.
+
+## A Stack: 7 Containers
+
+Todos os serviços rodam via Docker Compose. Veja o que está em execução:
+
+| Container | Finalidade |
+|-----------|-----------|
+| **hub-api** | API interna em Next.js + Postgres. Tarefas, briefings, insights. |
+| **neutron** | API de finanças pessoais. P&L, orçamentos, pagamentos recorrentes. |
+| **postgres** | Instância de banco compartilhada entre Hub e Neutron. |
+| **portainer** | UI de gerenciamento Docker. |
+| **aria-mcp** | Servidor MCP — scan de projetos, tarefas, briefings. |
+| **docker-mcp** | Servidor MCP — gerenciamento de containers via ARIA. |
+| **rastro-pop-mcp** | Servidor MCP — monitoramento de projetos de clientes. |
+
+O Postgres é compartilhado entre Hub e Neutron usando bancos separados na mesma instância. Nessa escala, rodar dois containers Postgres seria desperdício.
+
+## Organização do Docker Compose
+
+Uso um único `docker-compose.yml` raiz para todos os serviços, com uma rede compartilhada:
+
+```yaml
+# docker-compose.yml (abreviado)
+version: '3.9'
+
+networks:
+  aethos-net:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - aethos-net
+    restart: unless-stopped
+
+  hub-api:
+    build: ./hub
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/hub
+    networks:
+      - aethos-net
+    restart: unless-stopped
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    ports:
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  portainer-data:
+```
+
+Todos os serviços na `aethos-net` conseguem se comunicar pelo nome do container. O `hub-api` fala com `postgres:5432`. O `aria-mcp` fala com `hub-api:3000`. Sem exposição externa necessária para serviços internos.
+
+## Portainer: Vale a Pena para Dev Solo
+
+O Portainer roda como container e te dá uma UI web para tudo que é Docker. Para um dev solo, é genuinamente útil. Consigo:
+
+- Ver o status de todos os containers de relance
+- Puxar logs sem precisar de SSH
+- Reiniciar um serviço pelo browser
+- Inspecionar variáveis de ambiente e mounts dos containers
+
+É estritamente necessário? Não. Mas memorizar `docker compose -f /opt/aethos/docker-compose.yml logs -f hub-api --tail=50` cansa. O Portainer reduz isso a três cliques.
+
+O Portainer fica exposto na porta 9443 atrás do Nginx com autenticação básica. Não precisa ser público — acesso via Wireguard quando preciso da UI.
+
+## O Docker MCP da ARIA
+
+Essa é a parte com que mais fico satisfeito. Construí um servidor Docker MCP que expõe o gerenciamento de containers como ferramentas que o Claude pode chamar diretamente.
+
+Quando pergunto para a ARIA "o que está rodando no VPS?", ela chama `docker_list_containers` e recebe dados estruturados de volta. Quando um container cai, a ARIA pode chamar `docker_restart_container` sem eu precisar entrar via SSH.
+
+A superfície de ferramentas:
+
+```
+docker_list_containers   — todos os containers com status, CPU, memória
+docker_get_logs          — últimas N linhas de qualquer container
+docker_restart_container — reiniciar por nome
+docker_stop_container    — parar por nome
+docker_stats             — uso de recursos em tempo real
+```
+
+Isso significa que o briefing matinal da ARIA inclui a saúde real dos containers, não só um ping check.
+
+## Higiene Inteligente de Containers
+
+Nem todo container precisa rodar 24 horas por dia. A ARIA faz uma análise semanal: uso de CPU zerado + nenhuma atividade no projeto nos últimos 14 dias = candidato a ser parado.
+
+O Docker MCP expõe o `docker_stats` para que a ARIA veja quais containers estão ociosos. A lógica é simples: se `rastro-pop-mcp` não recebeu nenhuma chamada de ferramenta nessa semana e não mexi nesse projeto, ele é parado. Um comando para reiniciar quando precisar.
+
+Isso mantém a pressão de memória baixa e me dá métricas mais limpas para os containers que realmente importam.
+
+## Monitoramento
+
+A ARIA tem um comando `aria_vps_health` que verifica:
+
+- **Disco:** alerta se `/` estiver acima de 80% de uso
+- **Memória:** alerta se uso > 85%
+- **CPU:** alerta se a média de carga de 5 minutos > 3,5 (em 4 vCPUs)
+- **Contagem de containers:** se menos containers estiverem rodando do que o esperado, algo caiu
+
+Isso roda no briefing matinal. Se algo estiver acima do limite, a ARIA sinaliza com uma recomendação. Já detectei pressão de disco duas vezes assim antes que virasse um problema.
+
+## Custo Total Detalhado
+
+| Serviço | Custo/mês |
+|---------|-----------|
+| Contabo VPS | ~R$ 75 |
+| Domínio (.com.br) | ~R$ 4 amortizado |
+| Vercel (free tier) | R$ 0 |
+| Neon (free tier) | R$ 0 |
+| **Total** | **~R$ 79** |
+
+A Vercel hospeda todos os frontends Next.js (Menthos, Aethos Pilot, etc.) no plano gratuito. O Neon cuida dos bancos por projeto para os produtos SaaS — o modelo serverless significa que não pago nada até o projeto ter tráfego de verdade. Tudo que precisa ficar aquecido roda no VPS.
+
+## O Que Faria Diferente
+
+**Comece com um único `docker-compose.yml`, não arquivos por projeto.** Inicialmente tinha compose files separados por projeto. Isso criou confusão sobre em qual rede cada serviço estava e dificultou a comunicação entre serviços. Um compose file raiz com nomes de serviços claros é mais limpo.
+
+**Defina limites de recursos desde o início.** Sem `mem_limit` e `cpus` em cada serviço, um container com comportamento estranho pode consumir toda a memória disponível e derrubrar todo o resto. Aprendi isso quando um servidor MCP teve um vazamento de memória. Adicione os limites quando definir o serviço, não após um incidente.
+
+**Não super-engenheirizei a camada MCP cedo demais.** Passei uma semana construindo um Docker MCP sofisticado antes de realmente precisar dele. Nos primeiros meses, SSH e `docker compose logs` teriam sido suficientes. Construa a automação quando o processo manual se tornar doloroso.
+
+A stack é simples por design. Um VPS, um compose file, um punhado de containers e uma IA que consegue verificar todos eles. Isso é suficiente para tocar um negócio pequeno.

@@ -1,0 +1,226 @@
+---
+title: "Construindo o Neutron: Finanças Pessoais como Servidor MCP"
+description: "Por que construí meu próprio sistema de controle financeiro em vez de usar planilha ou app — e como empacotá-lo como servidor MCP o torna realmente útil."
+date: 2026-02-22
+lang: pt
+translationSlug: 2026-02-22-building-neutron
+tags: [aria, mcp, finance, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+Todo desenvolvedor que conheço já tentou gerenciar as finanças do freela em uma planilha. A maioria ainda usa — não porque seja bom, mas porque nada melhor se encaixa no trabalho.
+
+Usei uma por cerca de dois anos. Ficava desatualizada em dias. Na hora em que eu de fato a abria para verificar um número, tinha que reconstruir metade do mês de memória. Então tentei os aplicativos financeiros brasileiros. Depois voltei para a planilha. Depois construí o Neutron.
+
+Aqui está o porquê, e o que aprendi.
+
+## O Problema com as Finanças do Freela
+
+O padrão de renda para desenvolvedores independentes no Brasil é esquisito. Você não recebe um depósito de salário no dia cinco. Você recebe:
+
+- Um cliente pagando R$ 3.200 via PIX numa terça-feira
+- Receita de assinatura SaaS de R$ 390 chegando pelo Abacate Pay em datas variadas
+- Pagamentos em USD de um cliente internacional que caem na conta convertidos à taxa que a Wise decidiu hoje
+- Despesas de software em USD (Neon, Vercel, Anthropic API) debitadas de uma conta em dólar
+- Despesas brasileiras (hospedagem, celular, café) em BRL de uma conta diferente
+
+Duas moedas. Múltiplas contas. Timing irregular. Sem departamento de RH fazendo as contas.
+
+Uma planilha tecnicamente aguenta tudo isso. O problema é que ela só aguenta quando você a atualiza. No momento em que você para de atualizar — o que acontece no segundo em que aparece um prazo — ela vira um passivo. Você para de confiar nos números. Para de consultá-la. Ela apodrece.
+
+## Por Que os Apps Existentes Falharam Comigo
+
+Tentei Mobills, Organizze e GuiaBolso. São apps decentes se a sua vida financeira é salário + algumas contas fixas. A minha não é.
+
+O dealbreaker real foi o mesmo para todos: **sem interface para desenvolvedor**. Não há API. Nenhuma forma de consultar "qual é o meu líquido do mês?" programaticamente. Sem webhook quando uma nova transação chega. Sem como fazer uma pergunta e receber uma resposta sem clicar por quatro telas.
+
+Esses apps foram construídos para humanos que olham dashboards. Eu queria um sistema que eu pudesse consultar. A distinção é fundamental.
+
+Também avaliei algumas opções internacionais — Copilot, Monarch Money. UX melhor, ainda sem API para o tipo de acesso programático que precisava. E nenhum deles entende PIX, que é como ~70% da minha renda chega.
+
+## O Design do Neutron
+
+O Neutron não é um sistema sofisticado. É um banco de dados PostgreSQL com uma API REST e uma camada fina em Node.js. O schema é deliberadamente minimal:
+
+```sql
+-- Accounts (bank accounts, credit cards, dollar account)
+CREATE TABLE accounts (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  type        TEXT NOT NULL, -- checking, savings, credit, investment
+  balance     NUMERIC(12,2) NOT NULL DEFAULT 0,
+  active      BOOLEAN NOT NULL DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- All money in/out
+CREATE TABLE transactions (
+  id          SERIAL PRIMARY KEY,
+  account_id  INTEGER REFERENCES accounts(id),
+  amount      NUMERIC(12,2) NOT NULL, -- positive = income, negative = expense
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  description TEXT NOT NULL,
+  category    TEXT NOT NULL,
+  client      TEXT,                   -- which client/project this belongs to
+  date        DATE NOT NULL,
+  recurring_id INTEGER REFERENCES recurring(id),
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- Recurring income and expenses
+CREATE TABLE recurring (
+  id          SERIAL PRIMARY KEY,
+  description TEXT NOT NULL,
+  amount      NUMERIC(12,2) NOT NULL,
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  category    TEXT NOT NULL,
+  day_of_month INTEGER,              -- null = variable timing
+  active      BOOLEAN NOT NULL DEFAULT true
+);
+
+-- Monthly budget targets by category
+CREATE TABLE budgets (
+  id          SERIAL PRIMARY KEY,
+  category    TEXT NOT NULL,
+  month       TEXT NOT NULL,         -- YYYY-MM
+  limit_amount NUMERIC(12,2) NOT NULL
+);
+```
+
+Só isso. Quatro tabelas. Sem event sourcing, sem contabilidade de partidas dobradas, sem motor de conciliação. Apenas transações com categorias, contas e uma tabela de recorrentes.
+
+Adiciono transações via uma chamada simples de API ou um alias de CLI. Quando recebo um pagamento via PIX:
+
+```bash
+fin add --amount 3200 --desc "Cliente X - Sprint 3" --category receita-projetos --client rastro-pop
+```
+
+Isso é um POST para `localhost:3050/api/transactions`. Pronto.
+
+## O Wrapper MCP
+
+O banco de dados bruto não é o que torna o Neutron útil para a ARIA. O servidor MCP é.
+
+Envolvi a API REST do Neutron em um servidor MCP que expõe cinco ferramentas:
+
+```typescript
+// fin_summary: current month P&L at a glance
+{
+  "receita": 3200,
+  "despesa": 1100,
+  "saldo": 2100,
+  "month": "2026-02",
+  "currency": "BRL"
+}
+
+// fin_budget: budget consumption per category
+{
+  "categories": [
+    { "category": "software", "limit": 500, "spent": 410, "pct": 82 },
+    { "category": "marketing", "limit": 200, "spent": 0, "pct": 0 }
+  ]
+}
+
+// fin_by_category: breakdown of spending in a category
+// fin_recurring: upcoming recurring payments within N days
+// fin_accounts: current balance per account
+```
+
+Cada ferramenta retorna JSON plano e rotulado que o Claude pode raciocinar diretamente. As descrições das ferramentas dizem ao Claude exatamente quando usar cada uma:
+
+- `fin_summary` — "use para P&L mensal geral, receita vs despesas"
+- `fin_budget` — "use ao verificar se alguma categoria está acima ou próxima do orçamento"
+- `fin_recurring` — "use para encontrar pagamentos com vencimento próximo, aceita parâmetro days_ahead"
+
+Essa precisão importa. O Claude não chama `fin_budget` quando pergunto "quanto ganhei esse mês?" — ele chama `fin_summary`. As descrições são a lógica de roteamento.
+
+## Como a ARIA Usa o Neutron
+
+O briefing matinal sempre chama `fin_summary`. A saída é formatada assim:
+
+```
+💰 NEUTRON — Fevereiro 2026
+   Receita:  R$ 3.200
+   Despesa:  R$ 1.100
+   Saldo:    R$ 2.100
+   ⚠️  Software: 82% do orçamento (R$ 410 / R$ 500)
+```
+
+Aquela linha com `⚠️` é o Claude lendo `fin_budget`, vendo que Software está em 82%, e sinalizando isso sem que eu precise pedir. O limite está no prompt da skill: "sinalize qualquer categoria acima de 80%."
+
+`fin_recurring` roda quando o briefing detecta datas próximas. Se hoje é dia 20 e há um pagamento recorrente vencendo no dia 24, ele aparece:
+
+```
+📅 PRÓXIMOS VENCIMENTOS
+   Neon DB (USD 19) — vence 24/02
+   Vercel Pro (USD 20) — vence 28/02
+```
+
+Eu costumava perder renovações de assinatura regularmente. Não porque esquecia conceitualmente, mas porque estavam numa planilha que eu não estava abrindo. Agora estão no meu briefing matinal.
+
+O comando `/aria cash` (não o briefing completo, só finanças) chama todas as cinco ferramentas do Neutron e dá um quadro completo:
+
+```
+fin_summary     → P&L do mês
+fin_budget      → consumo de todas as categorias
+fin_accounts    → saldo por conta
+fin_recurring   → vencimentos em 14 dias
+fin_by_category → principais categorias de despesa
+```
+
+Total: ~200ms, cinco chamadas de ferramentas em paralelo. É mais rápido do que abrir o app.
+
+## A Parte Que Me Surpreendeu
+
+Eu esperava que o valor do Neutron fosse "finanças organizadas." Essa não é a parte realmente valiosa.
+
+A parte valiosa é o **histórico consultável**.
+
+Porque toda transação está no PostgreSQL com um campo de categoria e um campo de cliente, posso perguntar coisas como:
+
+```sql
+-- How much did Rastro Pop actually cost me in software/time?
+SELECT SUM(ABS(amount)) FROM transactions
+WHERE client = 'rastro-pop'
+AND category LIKE 'despesa-%'
+AND date >= '2025-01-01';
+
+-- What's my average monthly receita over the last 6 months?
+SELECT AVG(monthly_total) FROM (
+  SELECT DATE_TRUNC('month', date) AS month, SUM(amount) AS monthly_total
+  FROM transactions
+  WHERE amount > 0
+  AND date >= NOW() - INTERVAL '6 months'
+  GROUP BY month
+) sub;
+```
+
+Essas perguntas eram impossíveis de responder a partir de uma planilha em termos práticos. A partir do PostgreSQL com alguns meses de dados limpos, levam segundos.
+
+O wrapper MCP expõe parte disso via `fin_by_client` (uma ferramenta que adicionei depois), mas o acesso SQL bruto é o que permite a análise real. O Claude Code pode escrever SQL diretamente contra o banco do Neutron quando preciso de algo que as ferramentas padrão não cobrem.
+
+## O Que Eu Faria Diferente
+
+**Adicionar um método de entrada pelo celular mais cedo.** O alias de CLI é ótimo na mesa. Quando estou numa cafeteria e pago alguma coisa, não registro até voltar para o laptop — e aí esqueço. Comecei a usar um bot de WhatsApp para registrar despesas rápidas via mensagem, que redireciona para a API do Neutron. Isso é assunto para outro post.
+
+**Rastrear USD separadamente desde o início.** Comecei só com BRL e adicionei suporte a moedas depois. A coluna `currency` existe, mas a ferramenta `fin_summary` ainda agrega tudo em BRL usando uma taxa de conversão fixada no código. É um hack conhecido. Funciona bem o suficiente para rastreamento aproximado, mas é o tipo de coisa que me envergonharia num sistema financeiro real.
+
+**A taxonomia de categorias importa muito.** Nos primeiros meses minhas categorias eram inconsistentes — às vezes `software`, às vezes `saas`, às vezes `ferramentas`. GROUP BY em SQL com categorias inconsistentes é doloroso. Padronize cedo e force a consistência.
+
+## A Lição Real
+
+A lição não é "construa seu próprio app financeiro." A maioria das pessoas não deveria fazer isso.
+
+A lição é: **o valor está nos dados consultáveis, não no app**.
+
+Se você tem um app que rastreia suas finanças mas não te dá nenhuma API, você tem um banco de dados que outra pessoa controla e com o qual você não consegue conversar programaticamente. O app é o produto, e você é o usuário, não o dono.
+
+Quando os dados vivem na sua própria instância de PostgreSQL, com schema limpo e uma API que você controla, eles se tornam um ativo. Você pode construir em cima deles. A ARIA pode lê-los. Você pode fazer análises ad-hoc. Pode exportar, migrar, ou jogar fora a camada do app e manter os dados.
+
+É isso que o Neutron é, de verdade. Não um app financeiro. Um banco de dados financeiro com uma API fina, de minha propriedade.
+
+---
+
+*Próximo na série: [Roteamento de Modelos de IA em 4 Camadas: Dados Reais de Custo Após 3 Meses](/blog/2026-02-23-roteamento-modelos-custo)*

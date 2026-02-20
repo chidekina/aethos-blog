@@ -1,0 +1,199 @@
+---
+title: "A Arquitetura MCP da ARIA: Como 7 Servidores Conversam Entre Si"
+description: "Um mergulho profundo em como a ARIA orquestra chamadas entre 7 servidores MCP — varredura de projetos, finanças, Docker, WhatsApp, Calendário — e por que essa abordagem de grafo de ferramentas supera um monolito."
+date: 2026-02-21
+lang: pt
+translationSlug: 2026-02-21-aria-mcp-architecture
+tags: [aria, mcp, architecture, devtools]
+series: aria-progress
+draft: false
+---
+
+A primeira pergunta que as pessoas fazem quando explico a ARIA é: "Como ela sabe tudo isso?"
+
+A segunda, depois que explico o MCP, é: "Isso não é só um monte de microsserviços?"
+
+Sim e não. É um grafo de ferramentas que o Claude navega em tempo de execução, não um pipeline fixo. A distinção importa mais do que parece.
+
+## O Que o MCP Realmente É
+
+MCP (Model Context Protocol) é um padrão aberto que permite expor ferramentas — funções, fontes de dados, APIs — de um jeito que modelos de linguagem conseguem descobrir e invocar. A Anthropic publicou a especificação, mas ela funciona com qualquer cliente compatível.
+
+A ideia central: em vez de codificar integrações diretamente num prompt ou script, você declara capacidades que o modelo pode invocar conforme a tarefa exige. O modelo lê as ferramentas disponíveis, decide quais chamar, processa os resultados e decide o que chamar em seguida. É raciocínio sobre um grafo de ferramentas, não execução de um script fixo.
+
+Na prática, para a ARIA, funciona assim: quando executo `/aria`, o Claude Code enxerga algo como 40+ ferramentas distribuídas em 7 servidores. Ele não chama todas. Chama o subconjunto que a tarefa precisa, encadeia resultados quando necessário, e formata uma saída coerente.
+
+Aqui está a lista de servidores com seus papéis:
+
+| Servidor | Transporte | Ferramentas principais |
+|--------|-----------|---------------|
+| **ARIA MCP** | stdio (local) | `aria_context`, `aria_hub_data`, `aria_scan_projects`, `aria_store_briefing`, `aria_capture_insight`, `aria_queue_status` |
+| **Neutron** | HTTP (localhost:3050) | `fin_summary`, `fin_budget`, `fin_by_category`, `fin_recurring`, `fin_accounts` |
+| **Docker MCP** | stdio (local) | `docker_list_containers`, `docker_logs`, `docker_start`, `docker_stop`, `docker_stats` |
+| **Rastro Pop MCP** | HTTP (VPS) | `rp_service_health`, `rp_recent_errors`, `rp_traffic_summary` |
+| **Google Calendar** | HTTP (OAuth) | `gcal_events_today`, `gcal_events_week`, `gcal_create_event` |
+| **WhatsApp MCP** | HTTP (localhost:3051) | `wa_send_message`, `wa_recent_messages`, `wa_send_template` |
+| **Memory MCP** | stdio (local) | `memory_store`, `memory_search`, `memory_list_entities` |
+
+## O Modelo de Orquestração
+
+O ponto crítico a entender: o Claude decide em tempo de execução quais ferramentas chamar. Não há uma camada de orquestração entre o Claude e os servidores. O modelo é o orquestrador.
+
+É isso que diferencia o MCP de, digamos, um pipeline LangChain com etapas fixas. Quando executo `/aria`, o prompt da skill diz ao Claude qual é o objetivo (briefing matinal) e quais ferramentas estão disponíveis. O Claude então raciocina sobre quais informações precisa e chama as ferramentas na ordem que fizer sentido.
+
+Para o briefing matinal, o fluxo típico é assim:
+
+```
+1. aria_context          → data atual, lista de projetos ativos
+2. aria_hub_data         → tarefas, insights recentes, briefing de ontem
+   gcal_events_today     → (paralelo com hub_data)
+   fin_summary           → (paralelo com hub_data)
+3. aria_scan_projects    → git status de cada projeto ativo
+   docker_list_containers → (paralelo com scan_projects)
+4. fin_recurring         → pagamentos vencendo nos próximos 5 dias
+5. aria_store_briefing   → persiste o briefing gerado no Hub
+```
+
+Os passos 2 e 3 são amplamente paralelos — o Claude emite várias chamadas de ferramenta no mesmo turno quando os resultados não dependem uns dos outros. O passo 4 só executa se `fin_summary` sinalizou preocupações de fluxo de caixa próximas. O passo 5 sempre roda no final.
+
+A sequência real varia. Se o Hub estiver inacessível, o passo 2 falha e o Claude se adapta: chama `aria_scan_projects` diretamente, pula `aria_hub_data`, e anota a indisponibilidade do Hub no briefing. Essa resiliência é implícita no raciocínio, não codificada à força.
+
+## Um Trace Real: Fluxo do Briefing Matinal
+
+Veja como um fluxo de briefing real se parece em termos de chamadas de ferramentas (simplificado):
+
+```json
+[
+  { "tool": "aria_context", "result": { "date": "2026-02-21", "projects": ["aethos-blog", "menthos", "listai-shopee"] } },
+  { "tool": "aria_hub_data", "result": { "tasks": ["..."], "briefing_yesterday": "..." } },
+  { "tool": "gcal_events_today", "result": { "events": [{ "title": "Client call", "time": "14:00" }] } },
+  { "tool": "fin_summary", "result": { "receita": 3200, "despesa": 1100, "saldo": 2100 } },
+  { "tool": "aria_scan_projects", "args": { "projects": ["aethos-blog", "menthos"] }, "result": { "...": "..." } },
+  { "tool": "docker_list_containers", "result": { "running": 7, "stopped": 0 } },
+  { "tool": "fin_recurring", "args": { "days_ahead": 5 }, "result": { "upcoming": [{ "desc": "Neon DB", "amount": 19, "due": "2026-02-24" }] } },
+  { "tool": "aria_store_briefing", "args": { "content": "...", "date": "2026-02-21" } }
+]
+```
+
+Total: 8 chamadas de ferramentas, ~3–4 segundos de tempo real. A maior parte da latência é o `aria_scan_projects` executando `git log` em vários repositórios.
+
+## Considerações de Latência
+
+Latência é a principal reclamação de quem usa sistemas com muitas chamadas MCP. Quando você encadeia chamadas de ferramentas, cada uma adiciona tempo de ida e volta.
+
+Algumas coisas que faço para manter isso razoável:
+
+**Chamadas paralelas sempre que possível.** O Claude Code suporta múltiplas chamadas de ferramentas no mesmo turno. Tudo que não depende de resultados anteriores é agrupado. `gcal_events_today` e `fin_summary` não precisam esperar um pelo outro.
+
+**Carregamento preguiçoso por comando.** `/aria` (briefing completo) executa tudo. `/aria health` só chama Docker e Rastro Pop MCP. Os prompts de skill são escopados ao que cada comando realmente precisa. Não faz sentido consultar o Neutron quando só estou verificando a saúde dos containers.
+
+**Local primeiro para varreduras pesadas.** `aria_scan_projects` executa `git log --oneline -5` e `git status` localmente. Não há salto de rede. O mesmo vale para o Docker MCP — ele fala diretamente com o socket local do Docker.
+
+**As chamadas caras valem a pena.** `aria_hub_data` bate no meu VPS. Isso é ~80ms num bom dia. Ainda assim mais rápido do que eu abrir o Hub manualmente no navegador.
+
+O briefing completo leva de 4 a 8 segundos de ponta a ponta. Parece lento, mas executo `/aria` uma vez de manhã enquanto o café passa. A tolerância à latência é alta.
+
+## Por Que Grafo de Ferramentas Supera um Monolito
+
+A alternativa a essa arquitetura é um único script — ou uma única API grande — que puxa todos os dados e formata um briefing. Eu construí isso primeiro. Eram talvez 300 linhas de shell script.
+
+Problemas com a abordagem monolítica:
+
+**Tudo está acoplado.** A lógica de calendário fica junto com a lógica do Docker, que fica junto com a lógica financeira. Mudar o schema do Neutron significava mexer no script de briefing. Depurar era uma caça em um arquivo gigante.
+
+**Não é reutilizável.** O script de briefing não podia ser reaproveitado para `/aria health`. Era preciso escrever um script separado com queries Docker duplicadas.
+
+**Não é implantável independentemente.** Atualizar a integração com o Google Calendar exigia mexer no mesmo arquivo da integração financeira.
+
+Com servidores MCP:
+
+- O Neutron pode ser atualizado, reiniciado ou até substituído sem tocar em nenhum outro componente
+- O servidor Docker MCP é testado de forma independente — tenho uma suíte de testes que chama `docker_list_containers` diretamente, sem Claude envolvido
+- Novas capacidades são adicionáveis sem alterar servidores existentes. O WhatsApp MCP foi acoplado meses depois que a ARIA já estava rodando
+- Qualquer ferramenta baseada em Claude que conhece MCP pode usar esses servidores. O WhatsApp MCP não é específico da ARIA; é uma ferramenta que qualquer skill pode invocar
+
+A composabilidade é o grande ganho. O briefing matinal, o relatório noturno, o health check, o diagnóstico do VPS — todos chamam subconjuntos sobrepostos dos mesmos servidores. Sem duplicação.
+
+## Padrão de Resiliência Offline
+
+O Hub (meu VPS) ocasionalmente fica indisponível. Deploys, manutenção, instabilidade de rede a partir de Fortaleza. A ARIA não pode falhar por completo quando isso acontece.
+
+O padrão que adotei:
+
+```
+Hub online  → aria_hub_data (tarefas, histórico, insights do PostgreSQL)
+Hub offline → fallbacks locais + escritas enfileiradas
+```
+
+Para leituras, o Claude recorre a chamadas diretas de ferramentas: `aria_scan_projects` ainda funciona (git local), `docker_list_containers` ainda funciona (Docker local), `fin_summary` ainda funciona (Neutron roda localmente). O que quebra é a lista de tarefas e o histórico de briefings — esses só vivem no Hub.
+
+Para escritas (capturar insights, armazenar briefings, criar tarefas), a ARIA as enfileira localmente em SQLite em `~/.aria/queue.db`. Da próxima vez que o Hub ficar online, a fila drena automaticamente.
+
+O prompt da skill inclui instruções explícitas de fallback:
+
+```
+If aria_hub_data returns an error, note the Hub outage in the briefing.
+Continue with available tools. Do not fail the briefing because Hub is down.
+Queue any write operations using aria_capture_insight with offline=true.
+```
+
+Essa instrução é suficiente. O Claude cuida disso sem precisar de um caminho de código separado.
+
+## Construindo Servidores MCP em Node.js
+
+A especificação MCP tem SDKs oficiais para Node.js, Python e alguns outros. Tenho usado o SDK Node.js para todos os servidores específicos da ARIA.
+
+Um servidor mínimo se parece com isso:
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const server = new McpServer({ name: "aria-mcp", version: "1.0.0" });
+
+server.tool(
+  "aria_context",
+  "Returns current date, time, and list of active projects",
+  {},
+  async () => {
+    const projects = await scanActiveProjects();
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toLocaleTimeString("pt-BR"),
+          projects,
+        })
+      }]
+    };
+  }
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+Algumas lições aprendidas na construção desses servidores:
+
+**Retorne strings JSON, não objetos aninhados.** O Claude analisa o conteúdo `text` e raciocina sobre ele. JSON plano e bem rotulado é mais fácil para o modelo trabalhar do que estruturas profundamente aninhadas.
+
+**Descreva as ferramentas com precisão.** A descrição da ferramenta é o que o modelo usa para decidir se vai chamá-la ou não. "Retorna resumo financeiro do mês atual incluindo receita, despesas e líquido" é melhor do que "dados financeiros". A descrição é essencialmente um contrato.
+
+**Falhe com barulho, não silenciosamente.** Se uma ferramenta não consegue se conectar à sua fonte de dados, retorne um erro com contexto — não retorne um resultado vazio. Um resultado vazio parece "sem dados" para o modelo. Um resultado de erro diz ao modelo para recorrer a um fallback ou avisar o usuário.
+
+**Mantenha as ferramentas focadas.** `fin_summary` faz uma coisa: P&L do mês atual. `fin_recurring` faz uma coisa: pagamentos recorrentes próximos. A tentação é criar uma ferramenta gorda de `fin_everything`. Resista. Ferramentas focadas são chamadas com mais precisão.
+
+## O Que Essa Arquitetura Torna Possível
+
+A coisa que não antecipei ao construir isso: os servidores se tornam uma plataforma reutilizável.
+
+Quando adicionei o WhatsApp MCP, não escrevi uma nova integração para cada skill. O prompt da skill apenas diz "você tem acesso a `wa_send_message`" e o Claude descobre quando usá-lo. O relatório noturno agora me envia um resumo por WhatsApp quando detecta que não o consultei até as 20:00. Isso exigiu talvez 2 linhas adicionais de prompt, não uma nova integração.
+
+Quando quero adicionar um novo sistema de monitoramento de projetos, o adiciono ao Rastro Pop MCP. Toda skill que chama `rp_service_health` se beneficia automaticamente.
+
+O grafo de ferramentas cresce independentemente das skills que o utilizam. Essa é a arquitetura que de fato escala.
+
+---
+
+*Próximo na série: [Construindo o Neutron: Finanças Pessoais como Servidor MCP](/blog/2026-02-22-construindo-neutron)*

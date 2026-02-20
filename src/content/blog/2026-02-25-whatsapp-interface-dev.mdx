@@ -1,0 +1,141 @@
+---
+title: "WhatsApp como Interface de Desenvolvedor: Usando a ARIA pelo Celular"
+description: "Como uso o WhatsApp para controlar a ARIA, criar tarefas e capturar ideias quando estou longe do teclado — e por que isso realmente funciona."
+date: 2026-02-25
+lang: pt
+translationSlug: 2026-02-25-whatsapp-dev-interface
+tags: [aria, whatsapp, devtools, mobile]
+series: aria-progress
+draft: false
+---
+
+Todo projeto de produtividade para desenvolvedores que se diz "mobile-first" comete o mesmo erro: pede para você instalar algo novo. Um novo app, um novo canal de notificações, um novo hábito. No Brasil especialmente, onde o WhatsApp é efetivamente o sistema operacional que as pessoas realmente usam, essa é exatamente a abordagem errada.
+
+Passo talvez 12 horas por dia com o WhatsApp aberto. Meus clientes me mandam mensagem por lá. Minha família está lá. Minha rede de freelancers está lá. Então quando comecei a construir a ARIA — minha assistente pessoal de IA — colocá-la no WhatsApp não foi um hack inteligente. Foi a escolha óbvia.
+
+## A Arquitetura
+
+A integração com WhatsApp roda em cima do [Baileys](https://github.com/WhiskeySockets/Baileys), uma biblioteca Node.js não oficial que conecta ao protocolo websocket do WhatsApp Web. Eu rodo ela como um daemon no meu VPS via um servidor MCP simples chamado `whatsapp-mcp`.
+
+O fluxo funciona assim:
+
+```
+WhatsApp (celular) → Baileys → inbox_messages.json → daemon processor → Hub API → respostas em fila
+```
+
+Mensagens recebidas de números na whitelist são gravadas em `inbox_messages.json`. Um cron job roda a cada 2 minutos, pega as mensagens pendentes, as roteia pela lógica da ARIA e enfileira as respostas. Quando eu descarrego a fila com `/aria inbox-send`, as respostas chegam no WhatsApp.
+
+Aqui está uma versão simplificada da lógica de roteamento:
+
+```typescript
+// daemon/process-inbox.ts
+interface InboxMessage {
+  from: string;
+  body: string;
+  timestamp: number;
+  processed: boolean;
+}
+
+async function routeMessage(message: InboxMessage): Promise<string> {
+  const body = message.body.trim().toLowerCase();
+
+  // Criação de tarefa: "tarefa: revisar o PR do rastro-pop"
+  if (body.startsWith("tarefa:") || body.startsWith("task:")) {
+    const title = message.body.split(":").slice(1).join(":").trim();
+    const task = await hubApi.createTask({
+      title,
+      priority: "MEDIUM",
+      project_name: inferProject(title),
+    });
+    return `Task created: #${task.id} — ${task.title}`;
+  }
+
+  // Captura de insight: "insight: freelancers não convertem na página de preços"
+  if (body.startsWith("insight:")) {
+    const content = message.body.split(":").slice(1).join(":").trim();
+    await hubApi.captureInsight({ content, source: "whatsapp" });
+    return `Insight captured.`;
+  }
+
+  // Comandos de status
+  if (body === "status" || body === "/status") {
+    const briefing = await hubApi.getQuickStatus();
+    return formatStatusSummary(briefing);
+  }
+
+  // Fallback: envia para a ARIA para processamento em linguagem natural
+  return await aria.processNaturalLanguage(message.body);
+}
+```
+
+## Segurança: A Whitelist
+
+Isso não é negociável. O Baileys dá acesso à sua conta do WhatsApp — todas as mensagens, todos os grupos, tudo. O daemon só processa mensagens de números explicitamente cadastrados em uma whitelist armazenada no banco de dados do Hub.
+
+```typescript
+// Só processar mensagens de números aprovados
+const whitelist = await db
+  .select()
+  .from(whatsappWhitelist)
+  .where(eq(whatsappWhitelist.active, true));
+
+const approvedNumbers = new Set(whitelist.map((w) => w.phone_number));
+
+for (const message of pendingMessages) {
+  if (!approvedNumbers.has(message.from)) {
+    console.warn(`[WhatsApp] Ignored message from unknown number: ${message.from}`);
+    continue;
+  }
+  await routeMessage(message);
+}
+```
+
+Agora mesmo, a whitelist tem exatamente um número: o meu.
+
+## Descarregando as Respostas
+
+As respostas enfileiradas não saem automaticamente — eu rodo `/aria inbox-send` no Claude Code quando quero descarregá-las. Isso é intencional. Me dá a chance de revisar o que a ARIA enfileirou antes de chegar no meu celular. Às vezes a resposta está errada, ou quero editá-la.
+
+A ferramenta MCP é simples:
+
+```bash
+# De uma sessão do Claude Code
+/aria inbox-send
+
+# A ARIA chama a ferramenta MCP que:
+# 1. Busca todas as respostas enfileiradas no Hub
+# 2. Envia cada uma via Baileys para o número apropriado
+# 3. Marca como enviadas
+```
+
+Na prática, descarrego umas 3-4 vezes por dia. O delay de 2 minutos no processamento não me incomoda — quando estou no celular mandando uma nota rápida de tarefa, não estou esperando resposta instantânea.
+
+## O Que Funciona Bem
+
+**A criação de tarefas em linguagem natural é o killer feature.** Quando estou longe do teclado e penso em algo que precisa ser feito, é só me mandar mensagem: "tarefa: revisar o PR do rastro-pop antes de amanhã." Dois minutos depois está no Hub com prioridade inferida do contexto. Sem trocar de app, sem login, sem fricção.
+
+**A captura de insights funciona da mesma forma.** "insight: freelancers sempre perguntam sobre a página de preços antes de converter — precisa de um FAQ melhor ali." Capturado, com timestamp, disponível na próxima vez que abro uma sessão no Claude.
+
+**Verificações rápidas de status** são úteis quando estou no transporte e quero saber o que é urgente sem abrir o notebook.
+
+## As Trocas
+
+Vou ser honesto sobre os pontos negativos:
+
+**Não é em tempo real.** O intervalo de polling de 2 minutos significa que isso serve para comunicação assíncrona, não alertas urgentes. Se preciso de notificações imediatas, uso um canal separado.
+
+**O Baileys é não oficial e quebra às vezes.** O protocolo web do WhatsApp muda sem aviso, o Baileys se atualiza, mas às vezes há um intervalo. Precisei reiniciar o daemon após atualizações do WhatsApp umas 3 vezes em 6 meses. É administrável, mas não é zero de manutenção.
+
+**Os Termos de Serviço do WhatsApp são uma preocupação.** Usar ferramentas de automação não oficiais é tecnicamente contra os termos de serviço do WhatsApp. Não estou construindo um negócio em cima disso — é automação pessoal — mas vale saber. A Meta tem aplicado isso de forma inconsistente para casos de uso pessoal.
+
+**Mensagens de grupo são ignoradas.** O daemon só processa mensagens diretas para o meu número. Isso é intencional — não quero que nenhuma conversa de grupo acidentalmente dispare criação de tarefa.
+
+## A Filosofia
+
+A melhor ferramenta para desenvolvedor é aquela que você realmente usa. Não uso o Notion de forma consistente. Esqueço de abrir o Linear. Não verifico meu bot do Telegram. Mas o WhatsApp está sempre aberto.
+
+A ARIA vive onde eu já estou. Esse é o ponto central. O assistente não deveria exigir que eu mude meus hábitos — deveria se encaixar nos hábitos que eu já tenho.
+
+Quando estou no meio de uma sessão de código e uma ideia surge, o caminho mais rápido para capturá-la é abrir o app que já está na minha barra de notificações e digitar uma frase. O WhatsApp é esse app. Então é onde a ARIA está.
+
+A arquitetura é um pouco improvisada. Um arquivo JSON como fila de mensagens não é exatamente algo enterprise. Mas funciona, é barato de rodar, e resolve um problema real: ferramentas para desenvolvedores que funcionam no celular sem precisar instalar nada novo.

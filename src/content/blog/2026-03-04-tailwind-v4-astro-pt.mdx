@@ -1,0 +1,151 @@
+---
+title: "Tailwind v4 no Astro: A Breaking Change Que Pega Todo Mundo"
+description: "Recebendo 'trying to use tailwindcss directly as a PostCSS plugin'? Aqui está a solução e o motivo do erro."
+date: 2026-03-04
+lang: pt
+translationSlug: 2026-03-04-tailwind-v4-astro
+tags: [til, astro, tailwind, devtools]
+draft: false
+---
+
+Você seguiu um tutorial. Instalou o Tailwind. Adicionou `@astrojs/tailwind` nas suas integrações. Rodou `npm run dev`.
+
+```
+Error: It looks like you're trying to use `tailwindcss` directly
+as a PostCSS plugin. This is no longer supported in Tailwind CSS v4.
+```
+
+Aqui está o que está acontecendo e como resolver.
+
+## Por Que Acontece
+
+O Tailwind v4 fez uma mudança arquitetural fundamental: abandonou o PostCSS como caminho principal de integração em favor de um plugin dedicado ao Vite. O Tailwind agora distribui `@tailwindcss/vite` e `@tailwindcss/cli` como os pontos de entrada recomendados.
+
+O `@astrojs/tailwind` — a integração oficial do Astro — funciona registrando o Tailwind como um plugin PostCSS internamente. Isso funcionava com o Tailwind v3. No v4, o Tailwind removeu o caminho pelo PostCSS (ou mais precisamente, tentar usá-lo lança esse erro). O pacote `@astrojs/tailwind` não foi atualizado para compatibilidade com o v4, então os dois são incompatíveis.
+
+Se você instalar o Tailwind v4 e configurá-lo do jeito que o README do `@astrojs/tailwind` ou tutoriais antigos ensinam, vai esbarrar nesse erro. Sempre.
+
+## O Jeito Errado (O Que Você Vai Achar nos Tutoriais)
+
+```ts
+// astro.config.mjs — NÃO USE COM TAILWIND v4
+import { defineConfig } from 'astro/config';
+import tailwind from '@astrojs/tailwind';
+
+export default defineConfig({
+  integrations: [tailwind()],
+});
+```
+
+Essa é a abordagem do v3. Não funciona com o v4.
+
+## O Jeito Certo
+
+**Passo 1: Remova o `@astrojs/tailwind`**
+
+```bash
+npm remove @astrojs/tailwind
+# ou
+bun remove @astrojs/tailwind
+```
+
+**Passo 2: Instale o `@tailwindcss/vite`**
+
+```bash
+npm install @tailwindcss/vite
+# ou
+bun add @tailwindcss/vite
+```
+
+**Passo 3: Adicione como plugin do Vite no `astro.config.mjs`**
+
+```ts
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import tailwindcss from '@tailwindcss/vite';
+import mdx from '@astrojs/mdx';
+
+export default defineConfig({
+  integrations: [mdx()],
+  vite: {
+    plugins: [tailwindcss()],
+  },
+});
+```
+
+Atenção: o Tailwind vai em `vite.plugins`, não em `integrations`. Esse é o lugar correto no v4.
+
+**Passo 4: Atualize o import do seu CSS**
+
+No v4, você não usa mais as diretivas `@tailwind`. Substitua-as por um único import:
+
+```css
+/* src/styles/global.css */
+@import "tailwindcss";
+
+/* Seus tokens de tema personalizado vão no @theme */
+@theme {
+  --color-brand: #6366f1;
+  --font-sans: 'Inter', sans-serif;
+}
+```
+
+A abordagem antiga do v3:
+
+```css
+/* NÃO USE — sintaxe do v3 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+Importe seu CSS global no layout:
+
+```astro
+---
+// src/layouts/Base.astro
+import '../styles/global.css';
+---
+```
+
+## O Bloco @theme
+
+O Tailwind v4 move os design tokens para o CSS usando o bloco `@theme`, no lugar de `tailwind.config.js`. Você ainda pode usar um `tailwind.config.js` para plugins, mas cores, fontes, espaçamentos e breakpoints customizados agora vivem no CSS:
+
+```css
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --font-heading: 'Cal Sans', sans-serif;
+  --radius-card: 0.75rem;
+}
+```
+
+Esses valores ficam disponíveis como classes utilitárias do Tailwind: `bg-brand-500`, `font-heading`, `rounded-card`.
+
+## Quando Você Ainda Precisa do PostCSS
+
+Se você tem outros plugins PostCSS no seu pipeline (ex: `autoprefixer`, `postcss-import`, plugins customizados), ainda vai precisar de um `postcss.config.js`. Mas o Tailwind em si não deve estar nesse arquivo. Remova-o da config do PostCSS e deixe o `@tailwindcss/vite` cuidar do processamento do Tailwind.
+
+```js
+// postcss.config.js — Tailwind removido, outros plugins permanecem
+export default {
+  plugins: {
+    autoprefixer: {},
+    // tailwindcss: {} — DELETE ESSA LINHA
+  },
+};
+```
+
+## Resumo
+
+| | Tailwind v3 | Tailwind v4 |
+|---|---|---|
+| Integração Astro | `@astrojs/tailwind` em `integrations` | `@tailwindcss/vite` em `vite.plugins` |
+| Diretivas CSS | `@tailwind base/components/utilities` | `@import "tailwindcss"` |
+| Configuração | `tailwind.config.js` | Bloco `@theme` no CSS |
+| PostCSS | Obrigatório | Não necessário para o Tailwind |
+
+A migração é tranquila quando você sabe o que mudou. O problema é que a maior parte do conteúdo disponível ainda mostra o jeito do v3, e a mensagem de erro não aponta para a solução.

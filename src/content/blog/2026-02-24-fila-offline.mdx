@@ -1,0 +1,279 @@
+---
+title: "O Problema da Fila Offline: Construindo Workflows de IA Resilientes"
+description: "Quando seu assistente de IA depende de um Hub remoto, o que acontece quando o Hub cai? Como resolvi a resiliência assíncrona com filas SQLite e sincronização automática."
+date: 2026-02-24
+lang: pt
+translationSlug: 2026-02-24-offline-queue-problem
+tags: [aria, architecture, resilience, devtools]
+series: aria-progress
+draft: false
+---
+
+A dependência mais importante da ARIA também é a mais frágil: o Hub.
+
+O Hub é o banco de dados PostgreSQL rodando no meu VPS em São Paulo. Ele guarda tudo que torna a ARIA genuinamente útil — tarefas, insights, histórico de briefings, atividade dos projetos. Quando está no ar, a ARIA é um assistente executivo completo. Quando cai, a ARIA é só um shell com alguns comandos git.
+
+Essa assimetria me incomodou o suficiente para resolver. Aqui está como.
+
+## O Que o Hub Faz (e o Que Quebra Sem Ele)
+
+Para entender o problema, você precisa saber do que o Hub é responsável.
+
+O Hub armazena:
+- **Tarefas** — minha lista de tarefas pessoal, sincronizada por `aria_create_task` e lida por `aria_hub_data`
+- **Insights** — aprendizados capturados durante sessões via `aria_capture_insight`
+- **Histórico de briefings** — briefings diários armazenados por `aria_store_briefing`, usados para que a ARIA possa referenciar "ontem eu tinha 3 tarefas abertas, hoje são 5"
+- **Agregação de atividade** — resumos de commits de projetos e notas de sessão
+
+Quando o Hub está inacessível, eis o que quebra:
+
+```
+aria_hub_data        → ERROR: connection refused
+aria_create_task     → ERROR: cannot persist task
+aria_capture_insight → ERROR: cannot store insight
+aria_store_briefing  → ERROR: briefing not saved
+```
+
+E eis o que ainda funciona:
+
+```
+aria_scan_projects      → OK (local git)
+aria_context            → OK (local date/time)
+docker_list_containers  → OK (local Docker socket)
+fin_summary             → OK (Neutron runs locally)
+gcal_events_today       → OK (Google API, not Hub)
+```
+
+O padrão é claro: ferramentas locais sobrevivem, ferramentas remotas falham. Numa boa semana, o uptime do Hub é de 99,9%. Numa semana com um deploy que deu errado, problemas de rede saindo de Fortaleza, ou uma reinicialização de VPS que esqueci de agendar fora do horário de pico, pode cair para 95% ou menos. Na frequência de um briefing diário, 95% de uptime significa uma falha a cada três semanas. É o suficiente para ser irritante.
+
+## O Princípio de Design
+
+O princípio que queria aplicar: **a ARIA deve degradar graciosamente, nunca falhar de forma abrupta**.
+
+Um Hub com falha deve significar "briefing com informação reduzida", não "briefing abortado". Uma escrita que não consegue alcançar o Hub deve ser enfileirada e entregue depois, não descartada.
+
+É o mesmo princípio por trás de toda fila de mensagens em sistemas distribuídos — você reconhece o recebimento localmente, entrega de forma assíncrona e garante consistência eventual. A diferença aqui é que minha "fila" tem um consumidor incomum: o Claude, lendo um arquivo SQLite via ferramenta MCP.
+
+## O Schema da Fila
+
+A fila offline fica em `~/.aria/queue.db`. É um banco de dados SQLite — escolhido especificamente porque SQLite é um único arquivo, sem configuração, sempre disponível (é local), e legível por qualquer processo sem servidor.
+
+```sql
+CREATE TABLE IF NOT EXISTS queue (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation   TEXT NOT NULL,      -- 'create_task' | 'capture_insight' | 'store_briefing'
+  payload     TEXT NOT NULL,      -- JSON string of the operation arguments
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  synced_at   TEXT,               -- NULL until synced
+  error       TEXT                -- last sync attempt error, if any
+);
+
+CREATE INDEX IF NOT EXISTS idx_queue_unsynced ON queue(synced_at) WHERE synced_at IS NULL;
+```
+
+Simples. Um tipo de operação, um payload JSON e estado de sincronização.
+
+## Como as Escritas São Enfileiradas
+
+As ferramentas MCP da ARIA que escrevem no Hub seguem todas o mesmo padrão: tenta o Hub primeiro, enfileira localmente em caso de falha.
+
+Veja como o `aria_capture_insight` funciona:
+
+```typescript
+server.tool(
+  "aria_capture_insight",
+  "Captures a learning, decision, or notable event. Persists to Hub or queues offline.",
+  {
+    content: z.string().describe("The insight text"),
+    project: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    offline: z.boolean().optional().describe("Force local queue (Hub unreachable)"),
+  },
+  async ({ content, project, tags, offline }) => {
+    const payload = { content, project, tags, captured_at: new Date().toISOString() };
+
+    if (!offline) {
+      try {
+        await hubClient.post("/api/insights", payload);
+        return { content: [{ type: "text", text: JSON.stringify({ status: "synced", destination: "hub" }) }] };
+      } catch (err) {
+        // Hub unreachable — fall through to queue
+        console.error("[aria_capture_insight] Hub unreachable, queuing locally:", err.message);
+      }
+    }
+
+    // Write to SQLite queue
+    const db = getQueueDb();
+    const result = db.prepare(
+      "INSERT INTO queue (operation, payload) VALUES (?, ?)"
+    ).run("capture_insight", JSON.stringify(payload));
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          status: "queued",
+          destination: "local",
+          queue_id: result.lastInsertRowid,
+          message: "Insight queued locally. Will sync when Hub is reachable."
+        })
+      }]
+    };
+  }
+);
+```
+
+O chamador — o Claude — recebe um status claro: `synced` ou `queued`. Se estiver enfileirado, o Claude anota isso na resposta para mim. Posso ver de relance se algo não chegou ao Hub.
+
+`aria_create_task` e `aria_store_briefing` seguem o padrão idêntico. A única diferença é a string `operation` na linha da fila.
+
+## A Cadeia de Fallback para Leituras
+
+Escritas são enfileiradas. Leituras recorrem a fontes alternativas.
+
+Quando `aria_hub_data` falha, o prompt da skill do briefing matinal tem instruções explícitas de fallback:
+
+```
+If aria_hub_data returns an error:
+1. Note the Hub outage in the briefing header
+2. For tasks: state "Hub offline — task list unavailable"
+3. For briefing history: skip the "yesterday" section entirely
+4. Continue with all other tool calls as normal
+5. Flag any pending insights or tasks for retry at end of briefing
+```
+
+Isso significa que um briefing com Hub offline ainda me mostra:
+- Status git dos projetos (via `aria_scan_projects`)
+- Resumo financeiro (via `fin_summary` — Neutron é local)
+- Saúde do Docker (via `docker_list_containers`)
+- Eventos de calendário (via `gcal_events_today`)
+- Pagamentos recorrentes próximos (via `fin_recurring`)
+
+O que está faltando: lista de tarefas e contexto do briefing de ontem. É aceitável. Sei que tenho tarefas. Só não tenho a lista na minha frente. Melhor do que nada.
+
+## aria_queue_status: Visibilidade na Fila
+
+A fila é inútil se não consigo vê-la. `aria_queue_status` dá ao Claude visibilidade:
+
+```typescript
+server.tool(
+  "aria_queue_status",
+  "Returns count and details of pending offline queue items. Use to check sync backlog.",
+  {},
+  async () => {
+    const db = getQueueDb();
+    const pending = db.prepare(
+      "SELECT id, operation, payload, created_at FROM queue WHERE synced_at IS NULL ORDER BY created_at ASC"
+    ).all();
+
+    const byOperation = pending.reduce((acc, row) => {
+      acc[row.operation] = (acc[row.operation] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          pending_total: pending.length,
+          by_operation: byOperation,
+          oldest: pending[0]?.created_at ?? null,
+          items: pending.slice(0, 5), // show first 5
+        })
+      }]
+    };
+  }
+);
+```
+
+Exemplo de saída quando há backlog:
+
+```json
+{
+  "pending_total": 3,
+  "by_operation": {
+    "capture_insight": 2,
+    "store_briefing": 1
+  },
+  "oldest": "2026-02-21T08:14:22Z",
+  "items": [
+    { "id": 41, "operation": "capture_insight", "payload": "{\"content\":\"Better Auth needs...\",\"project\":\"menthos\"}", "created_at": "2026-02-21T08:14:22Z" },
+    { "id": 42, "operation": "capture_insight", "payload": "{\"content\":\"Drizzle adapter...\",\"project\":\"menthos\"}", "created_at": "2026-02-21T10:32:11Z" },
+    { "id": 43, "operation": "store_briefing", "payload": "{\"date\":\"2026-02-21\",\"content\":\"...\"}", "created_at": "2026-02-21T08:05:01Z" }
+  ]
+}
+```
+
+O Claude exibe isso no briefing matinal quando há backlog:
+
+```
+⚠️ QUEUE: 3 itens pendentes (Hub estava offline ontem)
+   2x capture_insight, 1x store_briefing
+   Execute /aria sync para enviar ao Hub
+```
+
+## Sincronização Automática na Reconexão
+
+O processo de sync roda dentro de `aria_hub_data`. Antes de retornar dados do Hub, ele verifica a fila:
+
+```typescript
+async function syncQueue(hubClient: HubClient): Promise<SyncResult> {
+  const db = getQueueDb();
+  const pending = db.prepare(
+    "SELECT * FROM queue WHERE synced_at IS NULL ORDER BY created_at ASC"
+  ).all();
+
+  if (pending.length === 0) return { synced: 0, failed: 0 };
+
+  let synced = 0;
+  let failed = 0;
+
+  for (const item of pending) {
+    try {
+      const payload = JSON.parse(item.payload);
+      await hubClient.post(`/api/queue/${item.operation}`, payload);
+      db.prepare("UPDATE queue SET synced_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), item.id);
+      synced++;
+    } catch (err) {
+      db.prepare("UPDATE queue SET error = ? WHERE id = ?")
+        .run(err.message, item.id);
+      failed++;
+    }
+  }
+
+  return { synced, failed };
+}
+```
+
+Quando o Hub volta online e executo `/aria`, a primeira chamada bem-sucedida de `aria_hub_data` drena a fila. Aqueles dois insights que capturei durante a indisponibilidade do Hub chegam ao PostgreSQL antes mesmo de o briefing ser formatado.
+
+O comando `/aria sync` também aciona isso explicitamente, se quiser forçar uma sincronização sem rodar um briefing completo.
+
+## Lições Aprendidas
+
+**Projete para offline desde o início, não como uma reflexão tardia.** Adicionei a fila no segundo mês, depois de experimentar três indisponibilidades do Hub que perderam insights. Fazer o retrofit foi mais bagunçado do que teria sido projetar desde o primeiro dia. O padrão — tenta remoto, recorre à fila local — deveria ser o padrão para qualquer operação de escrita remota em um sistema assim.
+
+**SQLite é subestimado para estado local.** Considerei brevemente usar um arquivo JSON simples para a fila. O SQLite dá um pouco mais de trabalho para configurar, mas oferece escritas atômicas, indexação adequada e a capacidade de consultar com SQL. O índice parcial `idx_queue_unsynced` significa que verificar itens pendentes é sempre rápido, mesmo se a fila crescer muito. SQLite é a ferramenta certa aqui. JSON não é.
+
+**Visibilidade importa tanto quanto o mecanismo.** A fila que captura falhas silenciosamente mas nunca te informa sobre elas é quase pior do que nenhuma fila — você desenvolve uma falsa confiança de que tudo está sincronizando. A ferramenta `aria_queue_status` e o alerta no briefing garantem que sempre sei o estado real. Visibilidade faz parte do design, não é algo opcional.
+
+**Escope os fallbacks com precisão.** Versões iniciais do fallback tentavam demais — tentavam reconstruir listas de tarefas a partir do histórico git local ou do Memory MCP. Isso tornava o briefing offline complexo e propenso a erros. O design mais limpo é: reconhecer o que está indisponível, mostrar o que está disponível, manter simples. Usuários (inclusive eu) conseguem lidar com "tarefas indisponíveis — Hub offline." Não conseguem lidar com uma lista de tarefas alucinada.
+
+**Operações idempotentes ajudam enormemente.** Os endpoints do Hub para sincronização de fila são todos idempotentes — reenviar um `store_briefing` para a mesma data é um upsert seguro, não um insert duplicado. Isso significa que não preciso rastrear se um item foi "parcialmente aplicado" antes de uma falha. Envia de novo. Está tudo bem.
+
+## O Padrão Maior
+
+O que descrevi aqui é um padrão de outbox padrão, adaptado para um contexto de assistente de IA. A camada MCP age como produtora (enfileirando escritas), o Hub é o consumidor eventual, e o SQLite é o outbox local.
+
+A parte incomum é que a "lógica de aplicação" verificando a fila e tomando decisões de roteamento é o Claude, não um worker em segundo plano. A sincronização roda sob demanda quando o Hub reconecta, acionada por uma chamada de modelo em vez de um cron job.
+
+Isso funciona bem. O briefing matinal é diário e confiável o suficiente para que a fila drene em até 24 horas no pior caso. Para um sistema de assistente pessoal, consistência eventual numa janela de 24 horas é perfeitamente aceitável.
+
+Se você está construindo qualquer sistema onde um assistente de IA escreve em um backend remoto, sugiro tratar esse backend como inerentemente não confiável desde o primeiro dia. Não porque ficará fora do ar o tempo todo — o meu não fica — mas porque assumir confiabilidade faz você escrever código que falha feio quando não é confiável. Assumir não confiabilidade faz você escrever código que degrada graciosamente.
+
+Degradação graciosa é o que torna uma ferramenta em algo que você pode de fato confiar.
+
+---
+
+*Esta é parte de uma série em andamento sobre a construção da ARIA. Comece do início: [Conheça a ARIA: Construindo um Assistente Executivo de IA Pessoal](/blog/2026-02-20-meet-aria)*

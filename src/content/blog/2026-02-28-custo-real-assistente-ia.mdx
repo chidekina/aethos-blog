@@ -1,0 +1,129 @@
+---
+title: "O Custo Real de Rodar um Assistente de IA Pessoal"
+description: "Detalhando o que a ARIA custa de verdade por mês — taxas de API, infraestrutura e uma contabilidade honesta sobre se vale a pena."
+date: 2026-02-28
+lang: pt
+translationSlug: 2026-02-28-real-cost-ai-assistant
+tags: [aria, cost, ai, infrastructure, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+A pergunta mais comum que recebo quando descrevo a ARIA — minha assistente pessoal de IA que roda briefings diários, gerencia tarefas, monitora infraestrutura e processa comandos pelo WhatsApp — é alguma variação de: "a API do Claude não é cara demais?"
+
+A resposta honesta é: depende completamente de como você usa, e investi um esforço real em otimização de custo. Aqui está o detalhamento real.
+
+## A Conta Mensal
+
+Deixa eu mostrar os números primeiro, depois explico as decisões por trás deles.
+
+| Serviço | Custo (mensal) | Observações |
+|---|---|---|
+| Claude API (Anthropic) | ~$13 | Após otimização de roteamento em 4 tiers |
+| Ollama (local) | $0 | Roda no VPS, trata ~40% das tarefas |
+| VPS (Contabo) | ~R$ 75 (~$15) | 4 vCPU, 8GB RAM, 200GB SSD |
+| Google AI (Gemini) | ~$2 | Uso do Menthos + Aethos Pilot |
+| Neon Postgres | $0 | Free tier (0,5GB, suficiente) |
+| Vercel | $0 | Free tier para todos os projetos |
+| **Total** | **~R$ 200/mês (~$40 USD)** | |
+
+Antes da otimização de roteamento, só a API do Claude estava custando $31/mês. O roteamento em 4 tiers — tarefas simples para o Claude Haiku, raciocínio complexo para o Sonnet, só o trabalho mais exigente para o Opus — reduziu para $13.
+
+## A Lógica de Roteamento
+
+É aqui que vem a maior parte da economia. A ARIA não usa o Opus para todo pedido. Ela usa o modelo mais barato que consegue lidar com a tarefa:
+
+```typescript
+// lib/aria/routing.ts
+type ModelTier = "local" | "haiku" | "sonnet" | "opus";
+
+function selectModel(task: ARIATask): ModelTier {
+  // Tier 0: Ollama local (grátis, rápido para tarefas simples)
+  if (task.type === "status_check" || task.type === "task_list") {
+    return "local";
+  }
+
+  // Tier 1: Haiku (~$0,001/1K tokens)
+  // Bom para: classificação, sumarização, formatação simples
+  if (task.complexity === "low" && !task.requiresReasoning) {
+    return "haiku";
+  }
+
+  // Tier 2: Sonnet (~$0,003/1K tokens)
+  // Bom para: briefings, code review, análise
+  if (task.complexity === "medium" || task.type === "briefing") {
+    return "sonnet";
+  }
+
+  // Tier 3: Opus (~$0,015/1K tokens)
+  // Reservado para: decisões de arquitetura, debug complexo, análise profunda
+  return "opus";
+}
+```
+
+Na prática, cerca de 40% dos pedidos vão para o Ollama (custo zero), 35% para o Haiku (muito barato), 20% para o Sonnet (moderado) e só 5% para o Opus (caro). Essa distribuição é resultado de uma categorização intencional das tarefas, não sorte.
+
+## O Que o Ollama Roda
+
+A instância local do Ollama no meu VPS trata tarefas que não precisam de raciocínio de modelo de fronteira:
+
+- **Verificações de status**: "quantas tarefas vencem hoje?" — recuperação pura de dados, output formatado
+- **Listagem e filtragem de tarefas**: "me mostre tarefas de alta prioridade do rastro-pop"
+- **Classificação simples**: roteamento de mensagens do WhatsApp para o handler certo
+- **Respostas baseadas em templates**: confirmação de criação de tarefa, reconhecimento de comandos do WhatsApp
+
+Uso o `llama3.2:3b` para essas tarefas. É rápido o suficiente (2-3 segundos no meu VPS), preciso o suficiente para tarefas estruturadas e custa exatamente R$ 0.
+
+A troca: as respostas do Ollama às vezes são menos refinadas que as do Claude. Para uma consulta de lista de tarefas, isso não importa. Para um briefing com nuances sobre a saúde de um projeto, roteio para o Sonnet.
+
+## O Que Você Ganha por R$ 200/Mês
+
+Deixa eu descrever um dia típico de operação da ARIA:
+
+**6h00** — Briefing diário roda automaticamente. Puxa atividade de git das últimas 24 horas, verifica tarefas atrasadas, resume dados financeiros, sinaliza alertas de infraestrutura. Gera um briefing de 400 palavras entregue no meu WhatsApp. Custo: ~$0,02 (Sonnet).
+
+**9h30** — Estou no celular e penso em uma tarefa. Mando mensagem para a ARIA: "tarefa: revisar o webhook do abacate pay no menthos". Tarefa criada no Hub, confirmação de volta em 2 minutos. Custo: ~$0,001 (Ollama).
+
+**14h00** — Peço para a ARIA durante uma sessão no Claude analisar um diff de PR e identificar preocupações de segurança. Custo: ~$0,05 (Sonnet, contexto maior).
+
+**18h00** — Verificação de saúde da infraestrutura roda. Faz ping em todos os serviços deployados, verifica tempos de resposta, valida connection pools do Neon. Resumo adicionado ao briefing do dia. Custo: ~$0,01 (Haiku).
+
+**23h00** — Peço para a ARIA ajudar a projetar o schema de banco de dados para uma nova feature. Vamos e voltamos por 30 minutos. Custo: ~$0,30 (Opus, raciocínio complexo).
+
+Total para um dia completo ativo: aproximadamente $0,40-0,60. Mensal: $13-18 em taxas de API.
+
+## A Comparação que Importa
+
+Um serviço de assistente profissional — um assistente virtual de serviços como Time Etc ou Fancy Hands — começa em torno de $25-30/hora para gestão básica de tarefas, disponível talvez 10 horas por semana. São $1.000+/mês por uma capacidade humana menos disponível do que a ARIA.
+
+Uma reunião em uma cafeteria com um advisor ou consultor freelancer para revisar sua semana, discutir prioridades de projeto e identificar riscos: provavelmente R$ 150-300 por duas horas, se você achar alguém com o contexto técnico certo. A ARIA faz algo semelhante toda manhã por $0,02.
+
+A comparação não é perfeita — a ARIA não faz ligações, não tem expertise de domínio que eu não tenha fornecido, e às vezes alucina. Mas para redução de context-switching e consciência ambiental dos projetos, a relação valor-custo é difícil de questionar.
+
+## Os Custos Ocultos (A Parte Honesta)
+
+Aqui está o que R$ 200/mês não inclui:
+
+**Tempo de construção: 100+ horas.** Projetar a arquitetura da ARIA, escrever as ferramentas MCP, depurar o daemon do WhatsApp, iterar nos prompts de briefing, configurar a Hub API, conectar tudo. Na minha taxa horária de freelancer, esse é o custo dominante por uma margem enorme.
+
+**Manutenção contínua: ~2 horas/mês.** Atualizações do Baileys às vezes quebram o daemon do WhatsApp. Iteração de prompt acontece quando os briefings da ARIA ficam menos úteis. Novas ferramentas MCP são adicionadas conforme surgem novas necessidades.
+
+**Overhead cognitivo.** Rodar sua própria infraestrutura significa que você é dono dos incidentes. Quando o Ollama trava, eu reinicio. Quando um VPS fica sem memória, eu investigo. Esse é um custo real que ferramentas comerciais externalizam.
+
+Se você somasse o tempo de construção a, digamos, R$ 150/hora (uma taxa de freelancer conservadora), a ARIA "custou" mais de R$ 15.000 para ser construída. Esse é o número que ninguém coloca nesses posts de "quanto custa meu assistente de IA".
+
+## Vale a Pena?
+
+Medido puramente de forma financeira: **provavelmente não**, se você valorizar seu tempo de construção a preço de mercado.
+
+A ARIA me economiza aproximadamente 1-2 horas por semana de context-switching, verificação manual de status e overhead de gestão de tarefas. A R$ 150/hora, isso é R$ 2.400-4.800/ano em tempo recuperado. O custo de construção foi significativamente maior do que isso.
+
+Medido pelo que realmente importa para mim: **sim, sem dúvida.**
+
+Gosto de construir infraestrutura. A ARIA é um projeto que escala — cada nova ferramenta MCP, cada melhoria de prompt, cada nova fonte de dados a torna mais útil. O cálculo financeiro é secundário ao fato de estar construindo algo que se encaixa exatamente na forma como eu trabalho, em vez de me conformar à forma como um produto SaaS quer que eu trabalhe.
+
+O enquadramento honesto: se você quer os benefícios de um assistente de IA sem o investimento de construção, existem opções comerciais. Notion AI, Claude.ai Pro, várias ferramentas de produtividade com IA — são mais baratas para começar e não exigem manutenção. Você vai pagar mais por mês, mas perderá muito menos em tempo de construção.
+
+O que você não vai ter com opções comerciais: tarefas que vivem no mesmo banco de dados que suas métricas de projeto, briefings que conhecem seus projetos específicos pelo nome, integração com WhatsApp que entende seu fluxo de trabalho, queries SQL que juntam tarefas com atividade de git. Essa propriedade e integração é o que justifica o investimento de construção para mim.
+
+R$ 200/mês em custos operacionais não é o número que importa. A questão é se o investimento de 100 horas para construí-la valeu a pena. Para mim, construir a ARIA foi em si parte do valor.
