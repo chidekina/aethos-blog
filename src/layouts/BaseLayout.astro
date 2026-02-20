@@ -9,6 +9,7 @@ interface Props {
   pubDate?: Date;
   tags?: string[];
   isArticle?: boolean;
+  translationSlug?: string;
 }
 
 const {
@@ -19,10 +20,26 @@ const {
   pubDate,
   tags = [],
   isArticle = false,
+  translationSlug,
 } = Astro.props;
 
 const siteTitle = title === 'Aethos Tech Blog' ? title : `${title} — Aethos Tech`;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const translationURL = translationSlug ? new URL(`/blog/${translationSlug}/`, Astro.site) : null;
+
+// JSON-LD: WebSite schema (sitewide)
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Aethos Tech Blog',
+  url: Astro.site?.toString(),
+  description: 'Engineering blog. AI experiments. Micro SaaS learnings.',
+  publisher: {
+    '@type': 'Person',
+    name: 'Cesar',
+    url: 'https://github.com/chidekina',
+  },
+};
 ---
 
 <!doctype html>
@@ -45,6 +62,16 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
     <meta name="twitter:image" content={new URL(ogImage, Astro.site)} />
     <link rel="canonical" href={canonicalURL} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- hreflang -->
+    <link rel="alternate" hreflang={lang} href={canonicalURL} />
+    {translationURL && (
+      <link rel="alternate" hreflang={lang === 'en' ? 'pt' : 'en'} href={translationURL} />
+    )}
+    <link rel="alternate" hreflang="x-default" href={new URL('/', Astro.site)} />
+    <!-- JSON-LD sitewide -->
+    <script type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
+    <!-- JSON-LD per-page slot -->
+    <slot name="head" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <link rel="alternate" type="application/rss+xml" title="Aethos Tech Blog" href="/rss.xml" />
     <title>{siteTitle}</title>

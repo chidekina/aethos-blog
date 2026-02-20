@@ -35,6 +35,29 @@ const prevPost = seriesIndex > 0 ? seriesPosts[seriesIndex - 1] : null;
 const nextPost = seriesIndex < seriesPosts.length - 1 ? seriesPosts[seriesIndex + 1] : null;
 
 const ogImage = `/og/${post.slug}.png`;
+
+// JSON-LD BlogPosting
+const articleSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: post.data.title,
+  description: post.data.description,
+  image: new URL(ogImage, Astro.site),
+  datePublished: post.data.date.toISOString(),
+  inLanguage: post.data.lang === 'pt' ? 'pt-BR' : 'en',
+  author: {
+    '@type': 'Person',
+    name: 'Cesar',
+    url: 'https://github.com/chidekina',
+  },
+  publisher: {
+    '@type': 'Organization',
+    name: 'Aethos Tech',
+    url: 'https://aethostech.com.br',
+  },
+  url: new URL(`/blog/${post.slug}/`, Astro.site),
+  keywords: post.data.tags.join(', '),
+};
 ---
 
 <BaseLayout
@@ -45,7 +68,11 @@ const ogImage = `/og/${post.slug}.png`;
   isArticle={true}
   pubDate={post.data.date}
   tags={post.data.tags}
+  translationSlug={post.data.translationSlug}
 >
+  <!-- JSON-LD BlogPosting -->
+  <script type="application/ld+json" set:html={JSON.stringify(articleSchema)} slot="head" />
+
   <article>
     <!-- Post Header -->
     <header style="margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--color-border);">
@@ -63,6 +90,17 @@ const ogImage = `/og/${post.slug}.png`;
         <span class="lang-badge" aria-label={`Language: ${post.data.lang.toUpperCase()}`}>
           {post.data.lang.toUpperCase()}
         </span>
+
+        <!-- Language toggle -->
+        {post.data.translationSlug && (
+          <a
+            href={`/blog/${post.data.translationSlug}/`}
+            class="lang-toggle"
+            aria-label={`Read in ${post.data.lang === 'en' ? 'Portuguese' : 'English'}`}
+          >
+            {post.data.lang === 'en' ? 'Ler em PT' : 'Read in EN'}
+          </a>
+        )}
       </div>
 
       {post.data.series && (
