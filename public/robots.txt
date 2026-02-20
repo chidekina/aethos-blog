@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Don't index generated OG images
+Disallow: /og/
+
+Sitemap: https://blog.aethostech.com.br/sitemap-index.xml

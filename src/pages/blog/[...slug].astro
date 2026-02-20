@@ -42,6 +42,9 @@ const ogImage = `/og/${post.slug}.png`;
   description={post.data.description}
   ogImage={ogImage}
   lang={post.data.lang}
+  isArticle={true}
+  pubDate={post.data.date}
+  tags={post.data.tags}
 >
   <article>
     <!-- Post Header -->
