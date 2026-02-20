@@ -10,6 +10,7 @@ export async function GET(context: APIContext) {
     title: 'Aethos Tech Blog',
     description: 'Engineering blog. AI experiments. Micro SaaS learnings.',
     site: context.site!,
+    stylesheet: '/rss.xsl',
     items: sorted.map((post) => ({
       title: post.data.title,
       description: post.data.description,
