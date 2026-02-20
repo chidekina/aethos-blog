@@ -1,0 +1,96 @@
+---
+title: "TIL: Satori Only Supports WOFF, Not WOFF2 (and Not Variable Fonts)"
+description: "Spent 2 hours debugging OG image generation. The fix was a single font file format change. Documenting it so you don't have to."
+date: 2026-03-03
+lang: en
+tags: [til, astro, satori, devtools]
+draft: false
+---
+
+Two hours. Two hours to find out the problem was the font file format.
+
+## What I Was Building
+
+Dynamic OG images for this blog. Each post gets a generated `og.png` with the post title, author, and site branding. The stack: Satori to render JSX to SVG, `@resvg/resvg-js` to convert SVG to PNG, Astro static paths to generate one image per post at build time.
+
+Standard setup. Should have been 30 minutes.
+
+## The Error
+
+```
+Error: Unsupported OpenType signature wOF2
+```
+
+`wOF2` is the internal signature for WOFF2 files. Satori was choking on the font I passed it.
+
+## What I Tried First
+
+The Satori docs say you need to pass font data as an `ArrayBuffer`. My first attempt: fetch Inter from Google Fonts' GitHub directly.
+
+```ts
+const fontRes = await fetch(
+  'https://github.com/rsms/inter/raw/master/docs/font-files/Inter[slnt,wght].ttf'
+);
+const fontData = await fontRes.arrayBuffer();
+```
+
+This silently returned HTML — the GitHub page, not the binary file. You need the `raw.githubusercontent.com` URL, not the `github.com` one. Lesson: always verify the `Content-Type` header when fetching binary files.
+
+Fixed the URL, got the binary. New problem: Inter's variable font (`Inter[slnt,wght].ttf`) uses a variable font format. Satori doesn't support variable fonts. Different error, same result: broken OG images.
+
+## Second Attempt
+
+`@fontsource/inter` is a popular npm package that bundles Inter as static files. Installed it, tried to use it:
+
+```ts
+import font from '@fontsource/inter/files/inter-latin-700-normal.woff2';
+```
+
+The package ships `.woff` and `.woff2` files. I naturally grabbed `.woff2` — it's the modern format, smaller, better browser support.
+
+Same `wOF2` error.
+
+## The Fix
+
+Use `.woff`, not `.woff2`.
+
+```ts
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const fontPath = join(
+  process.cwd(),
+  'node_modules/@fontsource/inter/files/inter-latin-700-normal.woff'
+);
+const fontData = readFileSync(fontPath);
+
+// In your satori call:
+const svg = await satori(element, {
+  width: 1200,
+  height: 630,
+  fonts: [
+    {
+      name: 'Inter',
+      data: fontData.buffer,
+      weight: 700,
+      style: 'normal',
+    },
+  ],
+});
+```
+
+That's it. Build passes, OG images generate correctly.
+
+## Why Satori Doesn't Support WOFF2
+
+Satori uses its own OpenType parser — not the browser's font stack. The parser implements WOFF (the older format) but not WOFF2 (which uses Brotli compression and a more complex binary structure). Variable fonts are also out of scope — Satori needs a static font at a specific weight.
+
+This is documented in the Satori README, but it's easy to miss if you're going fast. The error message doesn't help: `Unsupported OpenType signature wOF2` tells you *what* failed but not *why* or what to use instead.
+
+## TIL
+
+When using Satori for OG image generation:
+- Use `.woff` files, not `.woff2`
+- Don't use variable fonts — use static weight files (e.g., `inter-latin-700-normal.woff`)
+- `@fontsource/*` packages include both formats; always grab the `.woff` one
+- Verify binary fetches by checking `Content-Type` before debugging the consumer

@@ -1,0 +1,225 @@
+---
+title: "Building Neutron: Personal Finance as an MCP Server"
+description: "Why I built my own financial tracking system instead of using a spreadsheet or app — and how wrapping it as an MCP server makes it actually useful."
+date: 2026-02-22
+lang: en
+tags: [aria, mcp, finance, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+Every developer I know has tried to manage their freelance finances in a spreadsheet. Most of them still use it — not because it's good, but because nothing better fits the job.
+
+I used one for about two years. It got stale within days. By the time I actually opened it to check a number, I had to reconstruct half the month from memory. Then I tried the Brazilian finance apps. Then I went back to the spreadsheet. Then I built Neutron.
+
+Here's why, and what I learned.
+
+## The Problem With Freelance Finances
+
+The income pattern for independent developers in Brazil is weird. You're not getting a salary deposit on the fifth. You're getting:
+
+- A client paying R$ 3,200 via PIX on a Tuesday
+- A SaaS subscription revenue of R$ 390 landing from Abacate Pay on various dates
+- USD payments from an international client that hit your account converted at whatever rate Wise decided today
+- Software expenses in USD (Neon, Vercel, Anthropic API) debited from a dollar account
+- Brazilian expenses (hosting, phone, coffee) in BRL from a different account
+
+Two currencies. Multiple accounts. Irregular timing. No payroll department handling the math.
+
+A spreadsheet can technically hold all of this. The problem is that it only holds it when you update it. The moment you stop updating — which happens the second a deadline appears — it becomes a liability. You stop trusting the numbers. You stop checking it. It rots.
+
+## Why Existing Apps Failed Me
+
+I tried Mobills, Organizze, and GuiaBolso. They're fine apps if your financial life is a salary + a few fixed bills. Mine is not.
+
+The real dealbreaker was the same for all of them: **no developer interface**. There's no API. No way to query "what's my net for the month?" programmatically. No webhook when a new transaction lands. No way to ask a question and get an answer without clicking through four screens.
+
+These apps were built for humans who look at dashboards. I wanted a system I could query. The distinction is fundamental.
+
+I also evaluated some international options — Copilot, Monarch Money. Better UX, still no API for the kind of programmatic access I needed. And none of them understand PIX, which is how ~70% of my income arrives.
+
+## Neutron's Design
+
+Neutron is not a sophisticated system. It's a PostgreSQL database with a REST API and a thin Node.js layer. The schema is deliberately minimal:
+
+```sql
+-- Accounts (bank accounts, credit cards, dollar account)
+CREATE TABLE accounts (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  type        TEXT NOT NULL, -- checking, savings, credit, investment
+  balance     NUMERIC(12,2) NOT NULL DEFAULT 0,
+  active      BOOLEAN NOT NULL DEFAULT true,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- All money in/out
+CREATE TABLE transactions (
+  id          SERIAL PRIMARY KEY,
+  account_id  INTEGER REFERENCES accounts(id),
+  amount      NUMERIC(12,2) NOT NULL, -- positive = income, negative = expense
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  description TEXT NOT NULL,
+  category    TEXT NOT NULL,
+  client      TEXT,                   -- which client/project this belongs to
+  date        DATE NOT NULL,
+  recurring_id INTEGER REFERENCES recurring(id),
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- Recurring income and expenses
+CREATE TABLE recurring (
+  id          SERIAL PRIMARY KEY,
+  description TEXT NOT NULL,
+  amount      NUMERIC(12,2) NOT NULL,
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  category    TEXT NOT NULL,
+  day_of_month INTEGER,              -- null = variable timing
+  active      BOOLEAN NOT NULL DEFAULT true
+);
+
+-- Monthly budget targets by category
+CREATE TABLE budgets (
+  id          SERIAL PRIMARY KEY,
+  category    TEXT NOT NULL,
+  month       TEXT NOT NULL,         -- YYYY-MM
+  limit_amount NUMERIC(12,2) NOT NULL
+);
+```
+
+That's it. Four tables. No event sourcing, no double-entry accounting, no reconciliation engine. Just transactions with categories, accounts, and a recurring table.
+
+I add transactions via a simple API call or a CLI alias. When I receive a PIX payment:
+
+```bash
+fin add --amount 3200 --desc "Cliente X - Sprint 3" --category receita-projetos --client rastro-pop
+```
+
+That's a POST to `localhost:3050/api/transactions`. Done.
+
+## The MCP Wrapper
+
+The raw database isn't what makes Neutron useful for ARIA. The MCP server is.
+
+I wrapped Neutron's REST API in an MCP server that exposes five tools:
+
+```typescript
+// fin_summary: current month P&L at a glance
+{
+  "receita": 3200,
+  "despesa": 1100,
+  "saldo": 2100,
+  "month": "2026-02",
+  "currency": "BRL"
+}
+
+// fin_budget: budget consumption per category
+{
+  "categories": [
+    { "category": "software", "limit": 500, "spent": 410, "pct": 82 },
+    { "category": "marketing", "limit": 200, "spent": 0, "pct": 0 }
+  ]
+}
+
+// fin_by_category: breakdown of spending in a category
+// fin_recurring: upcoming recurring payments within N days
+// fin_accounts: current balance per account
+```
+
+Each tool returns flat, labeled JSON that Claude can reason about directly. The tool descriptions tell Claude exactly when to use each one:
+
+- `fin_summary` — "use this for overall monthly P&L, income vs expenses"
+- `fin_budget` — "use this when checking if any category is over or near budget"
+- `fin_recurring` — "use this to find payments due soon, takes days_ahead parameter"
+
+That precision matters. Claude doesn't call `fin_budget` when I ask "how much did I earn this month?" — it calls `fin_summary`. The descriptions are the routing logic.
+
+## How ARIA Uses Neutron
+
+The morning briefing always calls `fin_summary`. The output gets formatted like this:
+
+```
+💰 NEUTRON — Fevereiro 2026
+   Receita:  R$ 3.200
+   Despesa:  R$ 1.100
+   Saldo:    R$ 2.100
+   ⚠️  Software: 82% do orçamento (R$ 410 / R$ 500)
+```
+
+That `⚠️` line is Claude reading `fin_budget`, seeing that Software is at 82%, and flagging it without me asking. The threshold is in the skill prompt: "flag any category above 80%."
+
+`fin_recurring` runs when the briefing detects upcoming dates. If today is the 20th and there's a recurring payment due on the 24th, it shows up:
+
+```
+📅 PRÓXIMOS VENCIMENTOS
+   Neon DB (USD 19) — vence 24/02
+   Vercel Pro (USD 20) — vence 28/02
+```
+
+I used to miss subscription renewals regularly. Not because I forgot about them conceptually, but because they were in a spreadsheet I wasn't opening. Now they're in my morning briefing.
+
+The `/aria cash` command (not the full briefing, just finances) calls all five Neutron tools and gives a full picture:
+
+```
+fin_summary     → month P&L
+fin_budget      → all category consumption
+fin_accounts    → balance per account
+fin_recurring   → due in 14 days
+fin_by_category → top spending categories
+```
+
+Total: ~200ms, five parallel tool calls. It's faster than opening the app.
+
+## The Part That Surprised Me
+
+I expected the value of Neutron to be "organized finances." That's not actually the valuable part.
+
+The valuable part is **queryable history**.
+
+Because every transaction is in PostgreSQL with a category and a client field, I can ask things like:
+
+```sql
+-- How much did Rastro Pop actually cost me in software/time?
+SELECT SUM(ABS(amount)) FROM transactions
+WHERE client = 'rastro-pop'
+AND category LIKE 'despesa-%'
+AND date >= '2025-01-01';
+
+-- What's my average monthly receita over the last 6 months?
+SELECT AVG(monthly_total) FROM (
+  SELECT DATE_TRUNC('month', date) AS month, SUM(amount) AS monthly_total
+  FROM transactions
+  WHERE amount > 0
+  AND date >= NOW() - INTERVAL '6 months'
+  GROUP BY month
+) sub;
+```
+
+Those questions were unanswerable from a spreadsheet in any practical sense. From PostgreSQL with a few months of clean data, they take seconds.
+
+The MCP wrapper exposes some of this via `fin_by_client` (a tool I added later), but the raw SQL access is what enables the real analysis. Claude Code can write SQL against Neutron's database directly when I need something the standard tools don't cover.
+
+## What I'd Do Differently
+
+**Add a mobile input method earlier.** The CLI alias is great at my desk. When I'm at a coffee shop and pay for something, I don't log it until I'm back at my laptop — and then I forget. I've started using a WhatsApp bot to log quick expenses via message, which routes to the Neutron API. That's a separate write-up.
+
+**Track USD separately from the start.** I started with BRL-only and bolted on currency support later. The `currency` column is there, but the `fin_summary` tool still aggregates everything in BRL using a hardcoded conversion rate. That's a known hack. It works well enough for rough tracking, but it's the kind of thing that would embarrass me in a real financial system.
+
+**Category taxonomy matters a lot.** The first few months my categories were inconsistent — sometimes `software`, sometimes `saas`, sometimes `ferramentas`. SQL GROUP BY on inconsistent categories is painful. Standardize early and enforce it.
+
+## The Real Lesson
+
+The lesson isn't "build your own finance app." Most people shouldn't do that.
+
+The lesson is: **the value is in queryable data, not in the app**.
+
+If you have an app that tracks your finances but gives you no API, you have a database that someone else controls and you can't talk to programmatically. The app is the product, and you're the user, not the owner.
+
+When the data lives in your own PostgreSQL instance, with clean schema and an API you control, it becomes an asset. You can build on top of it. ARIA can read it. You can run ad-hoc analysis. You can export it, migrate it, or throw away the app layer and keep the data.
+
+That's what Neutron is, really. Not a finance app. A finance database with a thin API, owned by me.
+
+---
+
+*Next in the series: [4-Tier AI Model Routing: Real Cost Data After 3 Months](/blog/2026-02-23-model-routing-cost-data)*

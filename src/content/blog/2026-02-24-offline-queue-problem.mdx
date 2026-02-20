@@ -1,0 +1,278 @@
+---
+title: "The Offline Queue Problem: Building Resilient AI Workflows"
+description: "When your AI assistant depends on a remote Hub, what happens when the Hub goes down? How I solved async resilience with SQLite queues and automatic sync."
+date: 2026-02-24
+lang: en
+tags: [aria, architecture, resilience, devtools]
+series: aria-progress
+draft: false
+---
+
+ARIA's most important dependency is also its most fragile one: Hub.
+
+Hub is the PostgreSQL database running on my VPS in São Paulo. It holds everything that makes ARIA actually useful — tasks, insights, briefing history, project activity. When it's up, ARIA is a full executive assistant. When it's down, ARIA is just a shell with some git commands.
+
+That asymmetry bothered me enough to fix it. Here's how.
+
+## What Hub Does (And What Breaks Without It)
+
+To understand the problem, you need to know what Hub is responsible for.
+
+Hub stores:
+- **Tasks** — my personal task list, synced by `aria_create_task` and read by `aria_hub_data`
+- **Insights** — learnings captured during sessions via `aria_capture_insight`
+- **Briefing history** — daily briefings stored by `aria_store_briefing`, used so ARIA can reference "yesterday I had 3 open tasks, today there are 5"
+- **Activity aggregation** — project commit summaries and session notes
+
+When Hub is unreachable, here's what breaks:
+
+```
+aria_hub_data        → ERROR: connection refused
+aria_create_task     → ERROR: cannot persist task
+aria_capture_insight → ERROR: cannot store insight
+aria_store_briefing  → ERROR: briefing not saved
+```
+
+And here's what still works:
+
+```
+aria_scan_projects      → OK (local git)
+aria_context            → OK (local date/time)
+docker_list_containers  → OK (local Docker socket)
+fin_summary             → OK (Neutron runs locally)
+gcal_events_today       → OK (Google API, not Hub)
+```
+
+The pattern is clear: local tools survive, remote tools fail. In a good week, Hub uptime is 99.9%. In a week with a deployment gone wrong, network issues from Fortaleza, or just a VPS reboot I forgot to schedule off-hours, it can dip to 95% or lower. At daily briefing frequency, 95% uptime means one failure every three weeks. That's enough to be annoying.
+
+## The Design Principle
+
+The principle I wanted to enforce: **ARIA should degrade gracefully, never fail hard**.
+
+A failed Hub should mean "briefing with reduced information," not "briefing aborted." A write that can't reach Hub should be queued and delivered later, not dropped.
+
+This is the same principle behind every message queue in distributed systems — you acknowledge receipt locally, deliver asynchronously, guarantee eventual consistency. The difference here is that my "queue" has an unusual consumer: Claude, reading a SQLite file via an MCP tool.
+
+## The Queue Schema
+
+The offline queue lives at `~/.aria/queue.db`. It's a SQLite database — chosen specifically because SQLite is a single file, zero configuration, always available (it's local), and readable from any process without a server.
+
+```sql
+CREATE TABLE IF NOT EXISTS queue (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation   TEXT NOT NULL,      -- 'create_task' | 'capture_insight' | 'store_briefing'
+  payload     TEXT NOT NULL,      -- JSON string of the operation arguments
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  synced_at   TEXT,               -- NULL until synced
+  error       TEXT                -- last sync attempt error, if any
+);
+
+CREATE INDEX IF NOT EXISTS idx_queue_unsynced ON queue(synced_at) WHERE synced_at IS NULL;
+```
+
+Simple. An operation type, a JSON payload, and sync state.
+
+## How Writes Get Queued
+
+The ARIA MCP tools that write to Hub all follow the same pattern: try Hub first, queue locally on failure.
+
+Here's how `aria_capture_insight` works:
+
+```typescript
+server.tool(
+  "aria_capture_insight",
+  "Captures a learning, decision, or notable event. Persists to Hub or queues offline.",
+  {
+    content: z.string().describe("The insight text"),
+    project: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    offline: z.boolean().optional().describe("Force local queue (Hub unreachable)"),
+  },
+  async ({ content, project, tags, offline }) => {
+    const payload = { content, project, tags, captured_at: new Date().toISOString() };
+
+    if (!offline) {
+      try {
+        await hubClient.post("/api/insights", payload);
+        return { content: [{ type: "text", text: JSON.stringify({ status: "synced", destination: "hub" }) }] };
+      } catch (err) {
+        // Hub unreachable — fall through to queue
+        console.error("[aria_capture_insight] Hub unreachable, queuing locally:", err.message);
+      }
+    }
+
+    // Write to SQLite queue
+    const db = getQueueDb();
+    const result = db.prepare(
+      "INSERT INTO queue (operation, payload) VALUES (?, ?)"
+    ).run("capture_insight", JSON.stringify(payload));
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          status: "queued",
+          destination: "local",
+          queue_id: result.lastInsertRowid,
+          message: "Insight queued locally. Will sync when Hub is reachable."
+        })
+      }]
+    };
+  }
+);
+```
+
+The caller — Claude — gets a clear status: `synced` or `queued`. If it's queued, Claude notes this in the response to me. I can see at a glance if something didn't reach Hub.
+
+`aria_create_task` and `aria_store_briefing` follow the identical pattern. The only difference is the `operation` string in the queue row.
+
+## The Fallback Chain for Reads
+
+Writes queue. Reads fall back to alternative sources.
+
+When `aria_hub_data` fails, the morning briefing skill prompt has explicit fallback instructions:
+
+```
+If aria_hub_data returns an error:
+1. Note the Hub outage in the briefing header
+2. For tasks: state "Hub offline — task list unavailable"
+3. For briefing history: skip the "yesterday" section entirely
+4. Continue with all other tool calls as normal
+5. Flag any pending insights or tasks for retry at end of briefing
+```
+
+This means a Hub-offline briefing still shows me:
+- Project git status (via `aria_scan_projects`)
+- Financial summary (via `fin_summary` — Neutron is local)
+- Docker health (via `docker_list_containers`)
+- Calendar events (via `gcal_events_today`)
+- Upcoming recurring payments (via `fin_recurring`)
+
+What it's missing: task list and yesterday's briefing context. That's acceptable. I know I have tasks. I just don't have the list in front of me. Better than nothing.
+
+## aria_queue_status: Visibility Into the Queue
+
+The queue is useless if I can't see it. `aria_queue_status` gives Claude visibility:
+
+```typescript
+server.tool(
+  "aria_queue_status",
+  "Returns count and details of pending offline queue items. Use to check sync backlog.",
+  {},
+  async () => {
+    const db = getQueueDb();
+    const pending = db.prepare(
+      "SELECT id, operation, payload, created_at FROM queue WHERE synced_at IS NULL ORDER BY created_at ASC"
+    ).all();
+
+    const byOperation = pending.reduce((acc, row) => {
+      acc[row.operation] = (acc[row.operation] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          pending_total: pending.length,
+          by_operation: byOperation,
+          oldest: pending[0]?.created_at ?? null,
+          items: pending.slice(0, 5), // show first 5
+        })
+      }]
+    };
+  }
+);
+```
+
+Example output when there's a backlog:
+
+```json
+{
+  "pending_total": 3,
+  "by_operation": {
+    "capture_insight": 2,
+    "store_briefing": 1
+  },
+  "oldest": "2026-02-21T08:14:22Z",
+  "items": [
+    { "id": 41, "operation": "capture_insight", "payload": "{\"content\":\"Better Auth needs...\",\"project\":\"menthos\"}", "created_at": "2026-02-21T08:14:22Z" },
+    { "id": 42, "operation": "capture_insight", "payload": "{\"content\":\"Drizzle adapter...\",\"project\":\"menthos\"}", "created_at": "2026-02-21T10:32:11Z" },
+    { "id": 43, "operation": "store_briefing", "payload": "{\"date\":\"2026-02-21\",\"content\":\"...\"}", "created_at": "2026-02-21T08:05:01Z" }
+  ]
+}
+```
+
+Claude surfaces this in the morning briefing when there's a backlog:
+
+```
+⚠️ QUEUE: 3 itens pendentes (Hub estava offline ontem)
+   2x capture_insight, 1x store_briefing
+   Execute /aria sync para enviar ao Hub
+```
+
+## Auto-Sync on Reconnect
+
+The sync process runs inside `aria_hub_data`. Before returning Hub data, it checks the queue:
+
+```typescript
+async function syncQueue(hubClient: HubClient): Promise<SyncResult> {
+  const db = getQueueDb();
+  const pending = db.prepare(
+    "SELECT * FROM queue WHERE synced_at IS NULL ORDER BY created_at ASC"
+  ).all();
+
+  if (pending.length === 0) return { synced: 0, failed: 0 };
+
+  let synced = 0;
+  let failed = 0;
+
+  for (const item of pending) {
+    try {
+      const payload = JSON.parse(item.payload);
+      await hubClient.post(`/api/queue/${item.operation}`, payload);
+      db.prepare("UPDATE queue SET synced_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), item.id);
+      synced++;
+    } catch (err) {
+      db.prepare("UPDATE queue SET error = ? WHERE id = ?")
+        .run(err.message, item.id);
+      failed++;
+    }
+  }
+
+  return { synced, failed };
+}
+```
+
+When Hub comes back online and I run `/aria`, the first successful `aria_hub_data` call drains the queue. Those two insights I captured during the Hub outage make it to PostgreSQL before the briefing is even formatted.
+
+The `/aria sync` command also triggers this explicitly, if I want to force a sync without running a full briefing.
+
+## Lessons Learned
+
+**Design for offline from the start, not as an afterthought.** I added the queue in month two, after experiencing three Hub outages that lost insights. Retrofitting it was messier than it would have been to design it in from day one. The pattern — try remote, fall back to local queue — should be the default for any remote write operation in a system like this.
+
+**SQLite is underrated for local state.** I briefly considered using a plain JSON file for the queue. SQLite is slightly more work to set up but gives you atomic writes, proper indexing, and the ability to query with SQL. The `idx_queue_unsynced` partial index means checking for pending items is always fast, even if the queue grows large. SQLite is the right tool here. JSON is not.
+
+**Visibility matters as much as the mechanism.** The queue that silently catches failures but never tells you about them is almost worse than no queue — you develop false confidence that everything is syncing. The `aria_queue_status` tool and the briefing alert ensure I always know the actual state. Visibility is part of the design, not a nice-to-have.
+
+**Scope the fallbacks precisely.** Early versions of the fallback would attempt too much — trying to reconstruct task lists from local git history or Memory MCP. That made the offline briefing complex and error-prone. The cleaner design is: acknowledge what's unavailable, surface what is, keep it simple. Users (including me) can handle "tasks unavailable — Hub offline." They can't handle a hallucinated task list.
+
+**Idempotent operations help enormously.** The Hub-side endpoints for queue sync are all idempotent — re-sending a `store_briefing` for the same date is a safe upsert, not a duplicate insert. This means I don't have to track whether an item was "partially applied" before a failure. Send it again. It's fine.
+
+## The Bigger Pattern
+
+What I've described here is a standard outbox pattern, adapted for an AI assistant context. The MCP layer acts as the producer (queuing writes), Hub is the eventual consumer, and SQLite is the local outbox.
+
+The unusual part is that the "application logic" checking the queue and making routing decisions is Claude, not a background worker. The sync runs on-demand when Hub reconnects, triggered by a model call rather than a cron job.
+
+This turns out to be fine. The morning briefing is daily and reliable enough that the queue drains within 24 hours in the worst case. For a personal assistant system, eventual consistency over a 24-hour window is perfectly acceptable.
+
+If you're building any system where an AI assistant writes to a remote backend, I'd suggest treating that backend as inherently unreliable from day one. Not because it will be down all the time — mine isn't — but because assuming reliability makes you write code that fails badly when it isn't. Assuming unreliability makes you write code that degrades gracefully.
+
+Graceful degradation is what makes a tool you can actually trust.
+
+---
+
+*This is part of an ongoing series on building ARIA. Start from the beginning: [Meet ARIA: Building a Personal AI Executive Assistant](/blog/2026-02-20-meet-aria)*

@@ -1,0 +1,120 @@
+---
+title: "Astro vs Next.js for a Dev Blog in 2026: The Honest Take"
+description: "I've built production apps in both. For a content-first dev blog, Astro wins — but not for the reasons most people say."
+date: 2026-03-01
+lang: en
+tags: [astro, nextjs, devtools, webdev]
+draft: false
+---
+
+I've shipped Next.js apps in production for three years. Client dashboards, SaaS platforms, API-heavy apps. When I decided to build this blog, my first instinct was to reach for Next.js — it's what I know, the tooling is excellent, and I could wire up any dynamic feature I wanted.
+
+I chose Astro instead. And after a few weeks of daily use, I'm confident it was the right call. But I want to be precise about *why*, because most Astro advocates wave their hands at "zero JS" and move on. The real reasons are more specific than that.
+
+## Context: What I Was Building
+
+A dev blog. MDX posts, tag filtering, OG images, an RSS feed, maybe a series feature. No user accounts, no database queries at request time, no real-time anything. It's content, wrapped in some UI.
+
+That context matters. If you're building something different, your answer might be different too.
+
+## Where Astro Actually Wins
+
+### Zero JS by default — and it's real this time
+
+Every framework says this. Astro means it. By default, a page component renders to static HTML with no JavaScript payload. Zero kilobytes of JS unless you explicitly opt in with `client:load`, `client:idle`, or `client:visible`.
+
+For a blog that's mostly text and code blocks, this is the correct trade-off. The Lighthouse score is embarrassingly good with almost no effort.
+
+### MDX is a first-class citizen
+
+Astro's MDX integration works the way you expect it to. Custom components via `components` prop, frontmatter validation with Content Collections, import statements in the MDX file itself. No special wrappers, no weird hydration concerns for server components — it just works.
+
+### Content Collections with Zod schema
+
+This is underrated. You define your frontmatter schema in TypeScript using Zod, and Astro validates every post at build time:
+
+```ts
+// src/content/config.ts
+import { defineCollection, z } from 'astro:content';
+
+const blog = defineCollection({
+  type: 'content',
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    date: z.date(),
+    tags: z.array(z.string()),
+    draft: z.boolean().default(false),
+    lang: z.enum(['en', 'pt']).default('en'),
+  }),
+});
+
+export const collections = { blog };
+```
+
+If a post has a malformed date or a missing required field, the build fails with a clear error pointing to the exact file and field. This kind of static guarantee over content is something Next.js doesn't give you out of the box. You'd need to wire it up yourself.
+
+### Build speed
+
+On this blog — which currently has a handful of posts — the full build takes under 3 seconds. As the post count grows, Astro's incremental builds keep this fast. Next.js `next build` for even modest apps starts to drag.
+
+### Simpler mental model for static content
+
+With Next.js App Router, you're constantly reasoning about: is this a Server Component? Can I use hooks here? Is this data being cached? Is this ISR or SSG? For a blog, none of that complexity buys you anything. Astro components are server-only by default. There's no client/server boundary to manage unless you introduce it explicitly.
+
+## Where Next.js Still Wins
+
+I'm not switching my SaaS products to Astro. Next.js is the right tool when:
+
+- **You need auth tightly coupled to the UI.** Better Auth, Supabase Auth, Clerk — all have first-class Next.js integrations. Astro has adapters, but the story is thinner.
+- **Your API routes and UI share a lot of logic.** Co-locating a route handler with the page that calls it is genuinely useful in Next.js. Astro's API routes work fine for simple cases but aren't as ergonomic.
+- **You're doing ISR.** If you need pages that revalidate on a schedule without a full redeploy, Next.js ISR is still the cleanest implementation. Astro's equivalent requires a server adapter and is more involved.
+- **Your team already knows Next.js.** The learning curve cost is real. Don't switch frameworks to switch frameworks.
+
+## The Gotcha That Tripped Me: Tailwind v4
+
+This cost me a couple of hours. Tailwind v4 dropped PostCSS-first in favor of a Vite plugin. The `@astrojs/tailwind` integration uses PostCSS under the hood — which means it's incompatible with Tailwind v4.
+
+Every tutorial and blog post you'll find still shows this:
+
+```ts
+// WRONG for Tailwind v4
+import tailwind from '@astrojs/tailwind';
+export default defineConfig({
+  integrations: [tailwind()],
+});
+```
+
+That will fail at build with: `"It looks like you're trying to use tailwindcss directly as a PostCSS plugin"`. I wrote a full post on the fix [here](/blog/2026-03-04-tailwind-v4-astro), but the short version: use `@tailwindcss/vite` as a Vite plugin, drop `@astrojs/tailwind` entirely.
+
+## OG Image Generation
+
+Both frameworks use Satori for this. The API surface is similar — you write JSX, Satori renders to SVG, `@resvg/resvg-js` converts to PNG.
+
+Astro's static path approach is slightly cleaner for a blog. You generate OG images as static files at build time:
+
+```ts
+// src/pages/og/[slug].png.ts
+export async function getStaticPaths() {
+  const posts = await getCollection('blog');
+  return posts.map(post => ({ params: { slug: post.slug }, props: post }));
+}
+```
+
+In Next.js, you'd typically use the `ImageResponse` API from `next/og`, which works well too — just a different shape. One footnote: Satori only supports WOFF fonts, not WOFF2 or variable fonts. I documented that separately [here](/blog/2026-03-03-til-satori-woff).
+
+## The Honest Verdict
+
+**Use Astro if:** Your site is 80%+ content. Blog, documentation site, portfolio, marketing page with maybe one or two interactive widgets.
+
+**Use Next.js if:** You're building an app that *also* has a blog section, or you need auth, dynamic data, or tight API co-location.
+
+**One-line version:**
+- Astro: the right tool when content is the product.
+- Next.js: the right tool when the content is a section of a larger product.
+
+The mistake I see often is people reaching for Next.js for a blog because it's the framework they know for apps. They're not wrong that it works — but they're carrying complexity they don't need. Astro removes it.
+
+---
+
+*This blog runs on Astro 5 + Tailwind v4 + MDX. The source isn't public yet, but I'll open it once I'm happy with the structure.*

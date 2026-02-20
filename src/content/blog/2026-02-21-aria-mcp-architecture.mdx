@@ -1,0 +1,198 @@
+---
+title: "ARIA's MCP Architecture: How 7 Servers Talk to Each Other"
+description: "A deep dive into how ARIA orchestrates calls across 7 MCP servers — project scanning, finances, Docker, WhatsApp, Calendar — and why this graph-of-tools approach beats a monolith."
+date: 2026-02-21
+lang: en
+tags: [aria, mcp, architecture, devtools]
+series: aria-progress
+draft: false
+---
+
+The first question people ask when I explain ARIA is: "How does it know all that stuff?"
+
+The second question, after I explain MCP, is: "Isn't that just a bunch of microservices?"
+
+Yes and no. It's a graph of tools that Claude navigates at runtime, not a hardcoded pipeline. The distinction matters more than it sounds.
+
+## What MCP Actually Is
+
+MCP (Model Context Protocol) is an open standard that lets you expose tools — functions, data sources, APIs — in a way that language models can discover and call them. Anthropic published the spec, but it works with any compliant client.
+
+The key idea: instead of hardcoding integrations inside a prompt or a script, you declare capabilities that the model can invoke based on what the task requires. The model reads the available tools, decides which ones to call, processes the results, and decides what to call next. It's reasoning over a tool graph, not executing a fixed script.
+
+In practice, for ARIA, it looks like this. When I run `/aria`, Claude Code sees something like 40+ tools spread across 7 servers. It doesn't call all of them. It calls the subset that the task needs, chains results where appropriate, and formats a coherent output.
+
+Here's the server list with their roles:
+
+| Server | Transport | Primary tools |
+|--------|-----------|---------------|
+| **ARIA MCP** | stdio (local) | `aria_context`, `aria_hub_data`, `aria_scan_projects`, `aria_store_briefing`, `aria_capture_insight`, `aria_queue_status` |
+| **Neutron** | HTTP (localhost:3050) | `fin_summary`, `fin_budget`, `fin_by_category`, `fin_recurring`, `fin_accounts` |
+| **Docker MCP** | stdio (local) | `docker_list_containers`, `docker_logs`, `docker_start`, `docker_stop`, `docker_stats` |
+| **Rastro Pop MCP** | HTTP (VPS) | `rp_service_health`, `rp_recent_errors`, `rp_traffic_summary` |
+| **Google Calendar** | HTTP (OAuth) | `gcal_events_today`, `gcal_events_week`, `gcal_create_event` |
+| **WhatsApp MCP** | HTTP (localhost:3051) | `wa_send_message`, `wa_recent_messages`, `wa_send_template` |
+| **Memory MCP** | stdio (local) | `memory_store`, `memory_search`, `memory_list_entities` |
+
+## The Orchestration Model
+
+The critical thing to understand: Claude decides at runtime which tools to call. There's no orchestration layer sitting between Claude and the servers. The model is the orchestrator.
+
+This is what makes MCP different from, say, a LangChain pipeline with hardcoded steps. When I run `/aria`, the skill prompt tells Claude what the goal is (morning briefing) and what tools are available. Claude then reasons about what information it needs and calls tools in whatever order makes sense.
+
+For the morning briefing, the typical flow looks like this:
+
+```
+1. aria_context          → get current date, active projects list
+2. aria_hub_data         → tasks, recent insights, yesterday's briefing
+   gcal_events_today     → (parallel with hub_data)
+   fin_summary           → (parallel with hub_data)
+3. aria_scan_projects    → git status on each active project
+   docker_list_containers → (parallel with scan_projects)
+4. fin_recurring         → payments due in next 5 days
+5. aria_store_briefing   → persist the generated briefing to Hub
+```
+
+Steps 2 and 3 are largely parallel — Claude issues multiple tool calls in the same turn where results don't depend on each other. Step 4 only runs if `fin_summary` flagged upcoming cash flow concerns. Step 5 always runs at the end.
+
+The actual sequence varies. If Hub is unreachable, step 2 fails and Claude adapts: calls `aria_scan_projects` directly, skips `aria_hub_data`, and notes the Hub outage in the briefing. That resilience is implicit in the reasoning, not hardcoded.
+
+## A Real Trace: Morning Briefing Flow
+
+Here's what an actual briefing flow looks like in terms of tool calls (simplified):
+
+```json
+[
+  { "tool": "aria_context", "result": { "date": "2026-02-21", "projects": ["aethos-blog", "menthos", "listai-shopee"] } },
+  { "tool": "aria_hub_data", "result": { "tasks": ["..."], "briefing_yesterday": "..." } },
+  { "tool": "gcal_events_today", "result": { "events": [{ "title": "Client call", "time": "14:00" }] } },
+  { "tool": "fin_summary", "result": { "receita": 3200, "despesa": 1100, "saldo": 2100 } },
+  { "tool": "aria_scan_projects", "args": { "projects": ["aethos-blog", "menthos"] }, "result": { "...": "..." } },
+  { "tool": "docker_list_containers", "result": { "running": 7, "stopped": 0 } },
+  { "tool": "fin_recurring", "args": { "days_ahead": 5 }, "result": { "upcoming": [{ "desc": "Neon DB", "amount": 19, "due": "2026-02-24" }] } },
+  { "tool": "aria_store_briefing", "args": { "content": "...", "date": "2026-02-21" } }
+]
+```
+
+Total: 8 tool calls, ~3–4 seconds wall time. Most of the latency is `aria_scan_projects` doing `git log` on multiple repos.
+
+## Latency Considerations
+
+Latency is the main complaint people have with MCP-heavy systems. When you're chaining tool calls, each one adds roundtrip time.
+
+A few things I do to keep it reasonable:
+
+**Parallel calls where possible.** Claude Code supports multiple tool calls in a single turn. Anything that doesn't depend on prior results gets batched. `gcal_events_today` and `fin_summary` don't need to wait for each other.
+
+**Lazy loading per command.** `/aria` (full briefing) runs everything. `/aria health` only calls Docker and Rastro Pop MCP. The skill prompts are scoped to what each command actually needs. No reason to query Neutron when I'm just checking container health.
+
+**Local-first for heavy scans.** `aria_scan_projects` runs `git log --oneline -5` and `git status` locally. There's no network hop. Same for Docker MCP — it talks to the local Docker socket.
+
+**The expensive calls are worth it.** `aria_hub_data` hits my VPS. That's ~80ms on a good day. Still faster than me manually opening Hub in a browser.
+
+The full briefing takes 4–8 seconds end to end. That sounds slow, but I'm running `/aria` once in the morning while my coffee brews. Latency tolerance is high.
+
+## Why Graph-of-Tools Beats a Monolith
+
+The alternative to this architecture is a single script — or a single large API — that pulls all the data and formats a briefing. I built that first. It was maybe 300 lines of shell script.
+
+Problems with the monolith approach:
+
+**Everything is coupled.** Calendar logic lives next to Docker logic lives next to finance logic. Changing the Neutron schema meant touching the briefing script. Debugging was a hunt through one giant file.
+
+**Not composable.** The briefing script couldn't be reused for `/aria health`. Had to write a separate script with duplicated Docker queries.
+
+**Not independently deployable.** Updating the Google Calendar integration required touching the same file as the finance integration.
+
+With MCP servers:
+
+- Neutron can be updated, restarted, or even replaced without touching any other component
+- The Docker MCP server is tested independently — I have a test suite that calls `docker_list_containers` directly, no Claude involved
+- New capabilities are addable without changing existing servers. WhatsApp MCP was bolted on months after ARIA was running
+- Any Claude-based tool that knows about MCP can use these servers. The WhatsApp MCP isn't ARIA-specific; it's a tool that any skill can invoke
+
+The composability is the real win. The morning briefing, the evening report, the health check, the VPS diagnostic — they all call overlapping subsets of the same servers. No duplication.
+
+## Offline Resilience Pattern
+
+Hub (my VPS) occasionally has downtime. Deployments, maintenance, network flakiness from Fortaleza. ARIA can't hard-fail when that happens.
+
+The pattern I settled on:
+
+```
+Hub online  → aria_hub_data (tasks, history, insights from PostgreSQL)
+Hub offline → local fallbacks + queued writes
+```
+
+For reads, Claude falls back to direct tool calls: `aria_scan_projects` still works (local git), `docker_list_containers` still works (local Docker), `fin_summary` still works (Neutron runs locally). What breaks is the tasks list and briefing history — those live only in Hub.
+
+For writes (capturing insights, storing briefings, creating tasks), ARIA queues them locally in SQLite at `~/.aria/queue.db`. Next time Hub comes online, the queue drains automatically.
+
+The skill prompt includes explicit fallback instructions:
+
+```
+If aria_hub_data returns an error, note the Hub outage in the briefing.
+Continue with available tools. Do not fail the briefing because Hub is down.
+Queue any write operations using aria_capture_insight with offline=true.
+```
+
+That instruction is enough. Claude handles it without needing a separate code path.
+
+## Building MCP Servers in Node.js
+
+The MCP spec has official SDKs for Node.js, Python, and a few others. I've been using the Node.js SDK for all ARIA-specific servers.
+
+A minimal server looks like this:
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const server = new McpServer({ name: "aria-mcp", version: "1.0.0" });
+
+server.tool(
+  "aria_context",
+  "Returns current date, time, and list of active projects",
+  {},
+  async () => {
+    const projects = await scanActiveProjects();
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          date: new Date().toISOString().split("T")[0],
+          time: new Date().toLocaleTimeString("pt-BR"),
+          projects,
+        })
+      }]
+    };
+  }
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+A few lessons from building these:
+
+**Return JSON strings, not nested objects.** Claude parses the `text` content and reasons about it. Flat, well-labeled JSON is easier for the model to work with than deeply nested structures.
+
+**Describe tools precisely.** The tool description is what the model uses to decide whether to call it. "Returns financial summary for current month including revenue, expenses, and net" is better than "finance data". The description is essentially a contract.
+
+**Fail loudly, not silently.** If a tool can't connect to its data source, return an error with context — don't return an empty result. An empty result looks like "no data" to the model. An error result tells the model to fall back or warn the user.
+
+**Keep tools focused.** `fin_summary` does one thing: current month P&L. `fin_recurring` does one thing: upcoming recurring payments. The temptation is to make a fat `fin_everything` tool. Resist it. Focused tools get called more precisely.
+
+## What This Architecture Makes Possible
+
+The thing I didn't anticipate when building this: the servers become a reusable platform.
+
+When I added WhatsApp MCP, I didn't write a new integration for each skill. The skill prompt just says "you have access to `wa_send_message`" and Claude figures out when to use it. The evening report now sends me a WhatsApp summary when it detects I haven't looked at it by 20:00. That took maybe 2 lines of additional prompt, not a new integration.
+
+When I want to add a new project monitoring system, I add it to Rastro Pop MCP. Every skill that calls `rp_service_health` automatically benefits.
+
+The graph of tools grows independently of the skills that use them. That's the architecture that actually scales.
+
+---
+
+*Next in the series: [Building Neutron: Personal Finance as an MCP Server](/blog/2026-02-22-building-neutron)*

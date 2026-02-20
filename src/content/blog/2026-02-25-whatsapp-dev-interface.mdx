@@ -1,0 +1,140 @@
+---
+title: "WhatsApp as a Developer Interface: Using ARIA from My Phone"
+description: "How I use WhatsApp to control ARIA, create tasks, and capture ideas when away from my keyboard — and why it actually works."
+date: 2026-02-25
+lang: en
+tags: [aria, whatsapp, devtools, mobile]
+series: aria-progress
+draft: false
+---
+
+Every mobile-first developer productivity tool makes the same mistake: it asks you to install something new. A new app, a new notification channel, a new habit. In Brazil especially, where WhatsApp is effectively the operating system people actually use, this is exactly the wrong approach.
+
+I spend maybe 12 hours a day with WhatsApp open. My clients message me there. My family is there. My freelancer network is there. So when I started building ARIA — my personal AI assistant — putting it on WhatsApp wasn't a clever hack. It was the obvious choice.
+
+## The Architecture
+
+The WhatsApp integration runs on [Baileys](https://github.com/WhiskeySockets/Baileys), an unofficial Node.js library that connects to WhatsApp Web's websocket protocol. I run it as a daemon on my VPS via a simple MCP server called `whatsapp-mcp`.
+
+The flow looks like this:
+
+```
+WhatsApp (phone) → Baileys → inbox_messages.json → daemon processor → Hub API → queued responses
+```
+
+Incoming messages from whitelisted numbers get written to `inbox_messages.json`. A cron job runs every 2 minutes, picks up pending messages, routes them through ARIA's logic, and queues responses back. When I flush the queue with `/aria inbox-send`, the replies hit WhatsApp.
+
+Here's a simplified version of the message routing logic:
+
+```typescript
+// daemon/process-inbox.ts
+interface InboxMessage {
+  from: string;
+  body: string;
+  timestamp: number;
+  processed: boolean;
+}
+
+async function routeMessage(message: InboxMessage): Promise<string> {
+  const body = message.body.trim().toLowerCase();
+
+  // Task creation: "tarefa: revisar o PR do rastro-pop"
+  if (body.startsWith("tarefa:") || body.startsWith("task:")) {
+    const title = message.body.split(":").slice(1).join(":").trim();
+    const task = await hubApi.createTask({
+      title,
+      priority: "MEDIUM",
+      project_name: inferProject(title),
+    });
+    return `Task created: #${task.id} — ${task.title}`;
+  }
+
+  // Insight capture: "insight: freelancers not converting on pricing page"
+  if (body.startsWith("insight:")) {
+    const content = message.body.split(":").slice(1).join(":").trim();
+    await hubApi.captureInsight({ content, source: "whatsapp" });
+    return `Insight captured.`;
+  }
+
+  // Status commands
+  if (body === "status" || body === "/status") {
+    const briefing = await hubApi.getQuickStatus();
+    return formatStatusSummary(briefing);
+  }
+
+  // Fallback: send to ARIA for natural language processing
+  return await aria.processNaturalLanguage(message.body);
+}
+```
+
+## Security: The Whitelist
+
+This is non-negotiable. Baileys gives you access to your WhatsApp account — every message, every group, everything. The daemon only processes messages from numbers explicitly in a whitelist stored in the Hub database.
+
+```typescript
+// Only process messages from approved numbers
+const whitelist = await db
+  .select()
+  .from(whatsappWhitelist)
+  .where(eq(whatsappWhitelist.active, true));
+
+const approvedNumbers = new Set(whitelist.map((w) => w.phone_number));
+
+for (const message of pendingMessages) {
+  if (!approvedNumbers.has(message.from)) {
+    console.warn(`[WhatsApp] Ignored message from unknown number: ${message.from}`);
+    continue;
+  }
+  await routeMessage(message);
+}
+```
+
+Right now the whitelist has exactly one number: mine.
+
+## Flushing Responses
+
+Queued responses don't go out automatically — I run `/aria inbox-send` from Claude Code when I want to flush them. This is intentional. It gives me a chance to review what ARIA queued before it hits my phone. Sometimes the response is wrong, or I want to edit it.
+
+The MCP tool is simple:
+
+```bash
+# From Claude Code session
+/aria inbox-send
+
+# ARIA calls the MCP tool which:
+# 1. Fetches all queued responses from Hub
+# 2. Sends each one via Baileys to the appropriate number
+# 3. Marks them as sent
+```
+
+In practice I flush maybe 3-4 times a day. The 2-minute processing delay doesn't bother me — when I'm on my phone sending a quick task note, I'm not expecting an instant reply.
+
+## What Works Well
+
+**Natural language task creation is the killer feature.** When I'm away from my keyboard and think of something that needs doing, I just message myself: "tarefa: revisar o PR do rastro-pop antes de amanhã." Two minutes later it's in the Hub with a priority inferred from context. No app switching, no login, no friction.
+
+**Idea capture works the same way.** "insight: freelancers always ask about the pricing page before converting — need better FAQ there." Captured, timestamped, available next time I open a Claude session.
+
+**Quick status checks** are useful when I'm commuting and want to know what's urgent without opening a laptop.
+
+## The Trade-offs
+
+Let me be honest about the downsides:
+
+**It's not real-time.** The 2-minute polling interval means this is for async communication, not urgent alerts. If I need immediate notifications, I use a separate channel.
+
+**Baileys is unofficial and occasionally breaks.** WhatsApp's web protocol changes without notice, Baileys updates follow, sometimes there's a gap. I've had to restart the daemon after WhatsApp updates maybe 3 times in 6 months. It's manageable but not zero-maintenance.
+
+**WhatsApp ToS is a concern.** Using unofficial automation tools is technically against WhatsApp's terms of service. I'm not building a business on this, it's personal automation, but it's worth knowing. Meta has been inconsistently enforcing this for personal use cases.
+
+**Group messages are ignored.** The daemon only processes direct messages to my number. This is by design — I don't want any group conversation accidentally triggering task creation.
+
+## The Philosophy
+
+The best developer tool is the one you actually use. I don't use Notion consistently. I forget to open Linear. I don't check my Telegram bot. But WhatsApp is always open.
+
+ARIA lives where I already am. That's the whole point. The assistant shouldn't require me to change my habits — it should fit into the ones I already have.
+
+When I'm deep in a coding session and an idea strikes, the fastest path to capturing it is opening the app that's already on my notification bar and typing a sentence. WhatsApp is that app. So that's where ARIA is.
+
+The architecture is a little janky. A JSON file as a message queue is not exactly enterprise-grade. But it works, it's cheap to run, and it solves a real problem: mobile-first developer tooling that doesn't require installing anything new.

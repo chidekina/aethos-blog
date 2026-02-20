@@ -1,0 +1,169 @@
+---
+title: "Why I Replaced Linear With a Postgres Table"
+description: "Linear is excellent software. For a solo developer who wants AI-queryable tasks integrated with everything else, owning the data matters more than the UI."
+date: 2026-02-26
+lang: en
+tags: [aria, devtools, productivity, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+Linear is genuinely good software. The keyboard shortcuts are excellent, the roadmap view is beautiful, the GitHub integration is tight. If you work on a team, Linear is probably the right tool.
+
+I don't work on a team. I work alone, across 6-7 projects simultaneously, with an AI assistant that needs to query my tasks programmatically. For that use case, a Postgres table is better than Linear.
+
+Here's why I made the switch, what I built, and what I gave up.
+
+## The Problem with Linear (for Solo Developers)
+
+Linear's strength is its interface. The kanban, the roadmap, the priorities, the notifications — it's all beautifully designed for humans looking at a screen. But that same interface becomes a liability when you want an AI to work with your tasks.
+
+To get data out of Linear you have two options: the GraphQL API (complex, rate-limited, requires OAuth setup for every integration) or webhooks (event-driven, fine for real-time but not for ad-hoc queries). Neither is great for "show me all my tasks tagged `rastro-pop` that are overdue plus the last git commit date for that project."
+
+The other problem was cost. Linear charges per seat, and even at the individual tier the pricing assumes you're getting value from the team features. I wasn't. I was paying for a polished UI to store data I couldn't easily query.
+
+## The Hub Schema
+
+The replacement is a `tasks` table in Neon Postgres, exposed via the Hub API. Here's the schema:
+
+```sql
+CREATE TABLE tasks (
+  id          SERIAL PRIMARY KEY,
+  title       TEXT NOT NULL,
+  description TEXT,
+  priority    TEXT NOT NULL DEFAULT 'MEDIUM'
+              CHECK (priority IN ('URGENT', 'HIGH', 'MEDIUM', 'LOW')),
+  status      TEXT NOT NULL DEFAULT 'TODO'
+              CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED')),
+  project_name TEXT,
+  due_date    DATE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_project ON tasks(project_name);
+CREATE INDEX idx_tasks_priority ON tasks(priority);
+```
+
+That's it. No foreign keys to users, no team hierarchy, no workspaces. It's a task table for one person.
+
+The Hub API wraps it with simple REST endpoints built on Next.js API routes:
+
+```typescript
+// app/api/tasks/route.ts
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get("status");
+  const project = searchParams.get("project");
+  const priority = searchParams.get("priority");
+
+  const conditions = [];
+  if (status) conditions.push(eq(tasks.status, status));
+  if (project) conditions.push(eq(tasks.projectName, project));
+  if (priority) conditions.push(eq(tasks.priority, priority));
+
+  const result = await db
+    .select()
+    .from(tasks)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(tasks.createdAt));
+
+  return Response.json({ tasks: result });
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const parsed = createTaskSchema.parse(body);
+
+  const [task] = await db.insert(tasks).values(parsed).returning();
+  return Response.json({ task }, { status: 201 });
+}
+```
+
+## How ARIA Uses It
+
+ARIA has three MCP tools for task management: `aria_create_task`, `aria_list_tasks`, and `aria_update_task`. They're thin wrappers over the Hub API.
+
+```typescript
+// MCP tool: aria_create_task
+{
+  name: "aria_create_task",
+  description: "Create a new task in the Hub",
+  inputSchema: {
+    type: "object",
+    properties: {
+      title: { type: "string" },
+      description: { type: "string" },
+      priority: { enum: ["URGENT", "HIGH", "MEDIUM", "LOW"] },
+      project_name: { type: "string" },
+      due_date: { type: "string", format: "date" },
+    },
+    required: ["title"],
+  },
+}
+```
+
+During a Claude Code session, I can say "create a task to refactor the auth middleware in rastro-pop, high priority, due Friday" and ARIA calls `aria_create_task` directly. No copy-pasting into a separate app, no context switch.
+
+## The Real Advantage: Cross-Table Queries
+
+This is the part Linear can't do. Because tasks live in the same Postgres database as briefings, insights, and project metadata, I can query across them:
+
+```sql
+-- All tasks for projects that had a commit in the last 3 days
+SELECT t.*
+FROM tasks t
+JOIN project_activity pa ON pa.project_name = t.project_name
+WHERE pa.last_commit_at > NOW() - INTERVAL '3 days'
+  AND t.status = 'TODO'
+ORDER BY t.priority, t.created_at;
+
+-- Overdue high-priority tasks with related insights
+SELECT t.title, t.due_date, i.content as related_insight
+FROM tasks t
+LEFT JOIN insights i ON i.project_name = t.project_name
+WHERE t.due_date < NOW()
+  AND t.priority IN ('URGENT', 'HIGH')
+  AND t.status NOT IN ('DONE', 'CANCELLED');
+```
+
+ARIA runs queries like this during daily briefings. "What's overdue?" becomes a SQL query, not a Linear API call through three layers of OAuth.
+
+## WhatsApp Integration
+
+Since tasks are in my database and exposed via a clean API, adding WhatsApp task creation was trivial:
+
+```
+tarefa: revisar o PR do rastro-pop antes de amanhã
+→ POST /api/tasks { title: "revisar o PR do rastro-pop", due_date: "2026-02-27", priority: "MEDIUM" }
+→ "Task created: #142 — revisar o PR do rastro-pop"
+```
+
+No Linear API client, no OAuth flow, no webhook setup. Just a fetch to my own API.
+
+## What I Gave Up
+
+Let me be clear about the trade-offs:
+
+**Team collaboration.** If you work with other developers, Linear's multi-user features are genuinely valuable. Assignments, mentions, notifications — none of that exists in my table.
+
+**GitHub integration.** Linear's automatic issue-to-PR linking is excellent. I now manually update task status when I close PRs, which takes about 10 seconds but is a step backward.
+
+**Roadmaps and cycles.** Linear's roadmap view is beautiful. My version is a SQL query with a `due_date` filter.
+
+**Polished notifications.** Linear notifies you intelligently. Mine is a daily briefing that mentions overdue items.
+
+For a solo developer who runs 6 projects simultaneously, none of those trade-offs matter much. Collaboration is async via GitHub PRs. Roadmaps are in my head and in docs. Notifications are in my briefing.
+
+## The Ownership Argument
+
+There's a deeper reason beyond the technical ones: I want to own my task data.
+
+When Linear has an outage (and they have had outages), my tasks are inaccessible. When they change pricing, I pay or migrate. When I want to build a custom view or integration, I'm limited by their API.
+
+My Postgres table doesn't have outages. Pricing doesn't change. The schema is mine to modify. When ARIA needs a new field — say, an `estimated_hours` column — I add it with a migration and the MCP tools are updated in 20 minutes.
+
+For a team, this trade-off goes the other way. The operational overhead of self-hosting outweighs the flexibility. But for a solo developer who already runs a VPS and a Neon database? The marginal cost of a tasks table is zero.
+
+Linear is excellent software. I'd recommend it to any team. But for building an AI-queryable personal productivity layer, owning the data matters more than the UI.

@@ -1,0 +1,214 @@
+---
+title: "4-Tier AI Model Routing: Real Cost Data After 3 Months"
+description: "How routing tasks to Ollama, Haiku, Sonnet, and Opus cut my AI spend by ~60% without sacrificing quality — with actual numbers."
+date: 2026-02-23
+lang: en
+tags: [aria, ai, cost, llm, devtools]
+series: aria-progress
+draft: false
+---
+
+For the first two months of ARIA, I used Claude Sonnet for everything. It worked great. It was also dumb.
+
+Not dumb in the "bad results" sense — Sonnet is excellent. Dumb in the "using a table saw to cut bread" sense. When ARIA writes a git commit message, it doesn't need a frontier model reasoning through multi-step problems. It needs to read a diff and produce a one-liner. A model that costs 15x less does that just fine.
+
+I started tracking costs in November. By January I had enough data to build a routing system. Here's what I found.
+
+## The Problem With One Model for Everything
+
+Before routing, my average monthly Claude API spend was around $28–32. That sounds low in absolute terms, but consider what it was buying:
+
+- ~40% of spend on commit messages, PR descriptions, and summaries
+- ~25% on morning/evening briefings
+- ~20% on actual coding tasks
+- ~15% on architecture discussions and complex debugging
+
+The first two categories — commit messages and briefings — are high-volume, low-complexity tasks. They run daily, sometimes multiple times a day. They need good formatting and coherent output, but they don't need deep reasoning. I was spending Sonnet-level money on tasks that a much cheaper model handles equally well.
+
+## The 4-Tier System
+
+I settled on four tiers after experimenting with three (no local model initially):
+
+| Tier | Model | Cost per 1M tokens (in/out) | Used for |
+|------|-------|----------------------------|---------|
+| 0 | Ollama `llama3.2:3b` (local) | **Free** | Commits, summaries, translations, simple explanations |
+| 1 | Claude Haiku 3.5 | $0.80 / $4.00 | Quick lookups, yes/no classification, short Q&A |
+| 2 | Claude Sonnet (default) | $3.00 / $15.00 | Coding, features, bug fixes, briefings |
+| 3 | Claude Opus | $15.00 / $75.00 | Architecture, security audits, complex refactors |
+
+Tier 0 is local, runs on my machine, costs nothing per token. The constraint is quality and context window (llama3.2:3b has an 8k context). Tier 3 barely runs — I invoke it explicitly for specific sessions, never automatically.
+
+## Routing Rules
+
+The routing lives in two places: the `aria_route_query` MCP tool (for ARIA-initiated tasks) and a `model-suggest` pre-tool hook in Claude Code (for interactive sessions).
+
+**Tier 0 — Ollama local:**
+
+- Git commit messages (reads diff, writes message)
+- PR descriptions (reads commits, writes summary)
+- Summarizing a file or a set of logs
+- Translating short text (PT ↔ EN)
+- Explaining what a command does
+- Categorizing a transaction description in Neutron
+
+The test: "Could a smart intern do this with 30 seconds of reading?" If yes, Tier 0.
+
+**Tier 1 — Haiku:**
+
+- "Is this a security issue or just a warning?"
+- Quick regex generation
+- Classifying a WhatsApp message (task request? question? spam?)
+- Checking if a string matches a pattern
+- Generating a short template from a known format
+
+The test: "Does this need actual reasoning, or just pattern matching?" Haiku is surprisingly good at pattern matching on short inputs.
+
+**Tier 2 — Sonnet (default):**
+
+Everything that doesn't fit Tier 0 or 1 and isn't in Tier 3. This is the workhorse. Feature implementation, debugging, refactoring, writing tests, the morning briefing (which requires synthesizing 8 tool call results into coherent output), code review.
+
+**Tier 3 — Opus:**
+
+- System architecture decisions where I need to think through trade-offs carefully
+- Security audits (reviewing auth flows, checking for injection vulnerabilities)
+- Complex refactors that touch many files and need to reason about state across the whole codebase
+- Anything where I've already tried Sonnet and it's getting confused
+
+I invoke Opus explicitly, never automatically. It's a deliberate choice, like calling a senior consultant instead of your regular dev.
+
+## The aria_route_query Tool
+
+For ARIA's own tasks (not interactive Claude Code sessions), routing is handled by the `aria_route_query` MCP tool. It classifies a task before deciding which model to use:
+
+```typescript
+server.tool(
+  "aria_route_query",
+  "Classify a task and suggest the appropriate model tier (0-3). Use before delegating work to determine cost-efficient routing.",
+  {
+    task: z.string().describe("Description of the task to classify"),
+    context_size: z.number().optional().describe("Approximate token count of context"),
+  },
+  async ({ task, context_size }) => {
+    const tier = classifyTask(task, context_size ?? 0);
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          tier,
+          model: TIER_MODELS[tier],
+          reasoning: TIER_REASONING[tier],
+        })
+      }]
+    };
+  }
+);
+
+function classifyTask(task: string, contextSize: number): 0 | 1 | 2 | 3 {
+  const lower = task.toLowerCase();
+
+  // Tier 0: free local
+  if (contextSize < 4000 && (
+    lower.includes("commit") ||
+    lower.includes("summarize") ||
+    lower.includes("translate") ||
+    lower.includes("describe this") ||
+    lower.includes("explain what")
+  )) return 0;
+
+  // Tier 1: cheap classification
+  if (contextSize < 2000 && (
+    lower.includes("classify") ||
+    lower.includes("is this") ||
+    lower.includes("categorize") ||
+    lower.includes("yes or no")
+  )) return 1;
+
+  // Tier 3: expensive
+  if (
+    lower.includes("architecture") ||
+    lower.includes("security audit") ||
+    lower.includes("refactor entire") ||
+    lower.includes("design system")
+  ) return 3;
+
+  // Default: Sonnet
+  return 2;
+}
+```
+
+This runs before ARIA delegates any sub-task to a model. The classification itself is pure logic — no LLM call for the router, which would defeat the purpose.
+
+## Real Numbers: Before vs After
+
+Monthly API spend, approximate:
+
+| Month | Spend | Notes |
+|-------|-------|-------|
+| October (baseline) | $31 | Sonnet-only, no routing |
+| November | $26 | Started routing commits to Haiku |
+| December | $19 | Added Ollama for local tasks |
+| January | $13 | Routing fully tuned, ~40% Ollama deflection |
+
+That's roughly a 58% reduction. The tasks I care about — coding sessions, architecture work — still run on Sonnet or Opus. The high-frequency low-complexity tasks (commits, briefing summaries, transaction categorization) moved to Ollama.
+
+To put the Ollama impact in concrete terms: ARIA writes a commit message for every significant git commit I make. In January that was around 85 commits across all projects. At Sonnet pricing, that's maybe $0.80–$1.20 in commits alone. At Ollama: $0.00.
+
+## Surprising Findings
+
+**Haiku handles more than I expected.** I started with Haiku only for yes/no classification. It turned out to handle short-context summarization well too — well enough that I moved "summarize this changelog" tasks from Sonnet to Haiku. The output is slightly less polished but entirely usable.
+
+**Ollama quality for commits is fine.** I expected to cringe at `llama3.2:3b` commit messages. I mostly don't. The model reads the diff, understands the change type, and writes something like "fix: correct null check in user session handler." That's all I need. I reviewed 30 of them; 27 were usable without editing.
+
+**Opus is rare but irreplaceable.** I used Opus maybe 8 times in three months. Three of those were security-related: reviewing the auth flow in Menthos, auditing webhook handling, checking the credit consumption logic for race conditions. In all three cases, Opus caught things Sonnet missed. The $0.50–$1.00 per session is worth it for high-stakes work.
+
+**The briefing is trickier than it looks.** The morning briefing synthesizes 8+ tool call results. I tried downgrading it to Haiku. The output was technically correct but felt mechanical — it listed facts without prioritization or narrative. Sonnet adds a layer of judgment ("the Software budget hit 82%, worth watching") that Haiku doesn't. Briefings stay on Sonnet.
+
+## The model-suggest Hook
+
+For interactive Claude Code sessions, I use a pre-tool hook that fires before the first model call and suggests a tier based on what I typed:
+
+```bash
+#!/bin/bash
+# ~/.claude/hooks/model-suggest.sh
+# Runs before Claude Code starts a session
+
+INPUT="$1"
+INPUT_LOWER=$(echo "$INPUT" | tr '[:upper:]' '[:lower:]')
+
+suggest_tier() {
+  if echo "$INPUT_LOWER" | grep -qE "commit|summary|summarize|translate|explain what"; then
+    echo "0 (Ollama — free local)"
+  elif echo "$INPUT_LOWER" | grep -qE "architecture|security audit|design system"; then
+    echo "3 (Opus — expensive, confirm?)"
+  else
+    echo "2 (Sonnet — default)"
+  fi
+}
+
+TIER=$(suggest_tier)
+echo "[ARIA] Suggested tier: $TIER" >&2
+```
+
+This doesn't force a model. It prints a suggestion to stderr that I can act on — or ignore. Most of the time I'm already using the right model by habit, but it's a useful nudge when I'm about to ask something trivial.
+
+## Trade-offs
+
+**Ollama latency.** llama3.2:3b on my machine (Ryzen 5, 32GB RAM, no discrete GPU) takes 3–8 seconds for a commit message. Sonnet via API takes ~1–2 seconds with network. For commits it's fine — I'm not staring at the terminal waiting. For interactive tasks it would be unacceptable.
+
+**Context window limits.** Ollama's 8k context means I can't send it large diffs or long files. Anything over ~3k tokens gets bumped to Haiku or Sonnet automatically. The context_size check in `classifyTask` handles this.
+
+**Cold start on Ollama.** First call after system restart takes ~15 seconds to load the model. After that it's warm and fast. I have Ollama set to start on boot so the warm-up happens before I need it.
+
+**Routing isn't perfect.** The classifier is keyword-based, not itself an LLM call. It makes mistakes — sometimes routing a complex "explain" question to Ollama when it should go to Sonnet. I catch these and fix the classifier. After three months it's good enough that I rarely notice the misroutes.
+
+## The Actual Lesson
+
+Using one model for everything is the lazy default and it's expensive. The routing logic is not complicated — a few hundred lines of Node.js and a shell script. The savings compound daily because the high-frequency tasks (commits, summaries, briefings) are exactly the ones you can deflect cheapest.
+
+The mental model I'd suggest: think about your task distribution. If you're doing AI-assisted development every day, a large fraction of your calls are probably low-complexity. Route those to free or cheap models. Save the expensive reasoning capacity for problems that actually need it.
+
+You don't need a sophisticated ML routing system. Keyword classification plus context length is enough to get 80% of the value. Start there.
+
+---
+
+*Next in the series: [The Offline Queue Problem: Building Resilient AI Workflows](/blog/2026-02-24-offline-queue-problem)*

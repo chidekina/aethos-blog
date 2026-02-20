@@ -1,0 +1,150 @@
+---
+title: "Tailwind v4 in Astro: The Breaking Change That Gets Everyone"
+description: "If you're getting 'trying to use tailwindcss directly as a PostCSS plugin' — here's the fix and why it happens."
+date: 2026-03-04
+lang: en
+tags: [til, astro, tailwind, devtools]
+draft: false
+---
+
+You followed a tutorial. You installed Tailwind. You added `@astrojs/tailwind` to your integrations. You ran `npm run dev`.
+
+```
+Error: It looks like you're trying to use `tailwindcss` directly
+as a PostCSS plugin. This is no longer supported in Tailwind CSS v4.
+```
+
+Here's what's happening and how to fix it.
+
+## Why It Happens
+
+Tailwind v4 made a fundamental architectural change: it dropped PostCSS as the primary integration path in favor of a dedicated Vite plugin. Tailwind now ships `@tailwindcss/vite` and `@tailwindcss/cli` as the recommended entry points.
+
+`@astrojs/tailwind` — the official Astro integration — works by registering Tailwind as a PostCSS plugin internally. That worked for Tailwind v3. In v4, Tailwind removed the PostCSS plugin path (or more precisely, trying to use it throws this error). The `@astrojs/tailwind` package hasn't been updated for v4 compatibility, so the two are incompatible.
+
+If you install Tailwind v4 and configure it the way the `@astrojs/tailwind` README or old tutorials tell you to, you will hit this error. Every time.
+
+## The Wrong Way (What You'll Find in Tutorials)
+
+```ts
+// astro.config.mjs — DO NOT USE WITH TAILWIND v4
+import { defineConfig } from 'astro/config';
+import tailwind from '@astrojs/tailwind';
+
+export default defineConfig({
+  integrations: [tailwind()],
+});
+```
+
+This is the v3 approach. It does not work with v4.
+
+## The Right Way
+
+**Step 1: Remove `@astrojs/tailwind`**
+
+```bash
+npm remove @astrojs/tailwind
+# or
+bun remove @astrojs/tailwind
+```
+
+**Step 2: Install `@tailwindcss/vite`**
+
+```bash
+npm install @tailwindcss/vite
+# or
+bun add @tailwindcss/vite
+```
+
+**Step 3: Add it as a Vite plugin in `astro.config.mjs`**
+
+```ts
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import tailwindcss from '@tailwindcss/vite';
+import mdx from '@astrojs/mdx';
+
+export default defineConfig({
+  integrations: [mdx()],
+  vite: {
+    plugins: [tailwindcss()],
+  },
+});
+```
+
+Note: Tailwind is in `vite.plugins`, not `integrations`. This is the correct placement for v4.
+
+**Step 4: Update your CSS import**
+
+In v4, you no longer use `@tailwind` directives. Replace them with a single import:
+
+```css
+/* src/styles/global.css */
+@import "tailwindcss";
+
+/* Your custom theme tokens go in @theme */
+@theme {
+  --color-brand: #6366f1;
+  --font-sans: 'Inter', sans-serif;
+}
+```
+
+The old v3 approach:
+
+```css
+/* DO NOT USE — v3 syntax */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+Import your global CSS in your layout:
+
+```astro
+---
+// src/layouts/Base.astro
+import '../styles/global.css';
+---
+```
+
+## The @theme Block
+
+Tailwind v4 moves design tokens into CSS using the `@theme` block instead of `tailwind.config.js`. You can still use a `tailwind.config.js` for plugins, but custom colors, fonts, spacing, and breakpoints now live in CSS:
+
+```css
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --font-heading: 'Cal Sans', sans-serif;
+  --radius-card: 0.75rem;
+}
+```
+
+These become available as Tailwind utility classes: `bg-brand-500`, `font-heading`, `rounded-card`.
+
+## When You Still Need PostCSS
+
+If you have other PostCSS plugins in your pipeline (e.g., `autoprefixer`, `postcss-import`, custom plugins), you still need a `postcss.config.js`. But Tailwind itself should not be in that file. Remove it from PostCSS config and let `@tailwindcss/vite` handle Tailwind processing.
+
+```js
+// postcss.config.js — Tailwind removed, other plugins stay
+export default {
+  plugins: {
+    autoprefixer: {},
+    // tailwindcss: {} — DELETE THIS LINE
+  },
+};
+```
+
+## Summary
+
+| | Tailwind v3 | Tailwind v4 |
+|---|---|---|
+| Astro integration | `@astrojs/tailwind` in `integrations` | `@tailwindcss/vite` in `vite.plugins` |
+| CSS directives | `@tailwind base/components/utilities` | `@import "tailwindcss"` |
+| Config | `tailwind.config.js` | `@theme` block in CSS |
+| PostCSS | Required | Not required for Tailwind |
+
+The migration is straightforward once you know what changed. The problem is that most content online still shows the v3 way, and the error message doesn't point you to the solution.
