@@ -1,0 +1,156 @@
+---
+title: "Conheça a ARIA: Construindo uma Assistente Executiva com IA"
+description: "Como eu passei de copiar e colar atualizações de status para ter uma IA que realmente entende meu fluxo de trabalho — e por que construí ela mesma em vez de usar ferramentas prontas."
+date: 2026-02-20
+lang: pt
+tags: [aria, ai, devtools, indie-hacking]
+series: aria-progress
+draft: false
+---
+
+Todo desenvolvedor que conheço tem um cemitério de ferramentas de produtividade que tentou e abandonou. Boards no Notion que ficaram desatualizados. Tickets no Linear que ninguém atualizou. Lembretes no Slack adiados ao infinito. Eu não era diferente.
+
+O que eu realmente queria era simples: algo que conhecesse *meu* contexto, pudesse me dar um briefing real de manhã, e não exigisse que eu o atualizasse manualmente. Algo que funcionasse do jeito que meu cérebro funciona, não do jeito que algum gerente de produto de SaaS acha que deveria funcionar.
+
+Então eu construí a **ARIA**.
+
+## O que é a ARIA?
+
+**ARIA** significa *Assistant for Reports, Insights & Agenda* — ou seja, assistente para relatórios, insights e agenda. É minha assistente executiva pessoal com IA, construída em cima do [Claude Code](https://claude.ai/code) e de uma coleção de servidores MCP que venho desenvolvendo nos últimos meses.
+
+A versão curta: ARIA é uma assistente com foco no terminal que entende todo o meu contexto de trabalho — projetos, finanças, infraestrutura, tarefas, calendário. Quando digito `/aria` de manhã, recebo um briefing real, não um template.
+
+```bash
+/aria                  # Briefing matinal
+/aria evening          # Relatório de fim de dia
+/aria task "título"    # Criar uma tarefa no Hub
+/aria health           # Status do Docker e da infra
+/aria vps              # Saúde do servidor de produção
+```
+
+Não é um produto. Não está tentando ser um. É um sistema que desenhei para exatamente um usuário: eu.
+
+## Como Começou
+
+A semente foi a frustração.
+
+Eu toco a [Aethos Tech](https://aethostech.com.br), onde construo produtos micro SaaS e projetos de clientes ao mesmo tempo. Em qualquer semana, posso estar subindo uma feature na plataforma de um cliente, resolvendo um problema de CI/CD num serviço diferente, e validando uma nova ideia de produto. O custo de trocar de contexto o tempo todo é brutal.
+
+Minhas manhãs costumavam ser assim:
+
+1. Abrir o navegador, checar o Linear → quais tarefas vencem hoje?
+2. Abrir outra aba, checar o banco → chegou a cobrança do Neon?
+3. SSH no VPS → está tudo funcionando?
+4. Checar Slack/WhatsApp → tem alguma urgência?
+5. Abrir o VS Code → ok, *onde eu estava mesmo?*
+
+São 20 a 30 minutos de overhead antes de escrever uma linha de código. E como era fragmentado em várias ferramentas, eu perdia contexto no meio da pesquisa constantemente.
+
+A primeira versão da ARIA era apenas um slash command do Claude Code que puxava o status do git dos projetos e formatava. Honestamente, bem básico. Mas me poupava 10 minutos toda manhã, e isso foi suficiente para continuar construindo.
+
+## A Arquitetura
+
+A ARIA é construída em três camadas:
+
+### 1. Claude Code + Slash Commands
+
+O Claude Code suporta slash commands personalizados via arquivos de configuração em `~/.claude/`. Cada comando carrega uma "skill" — um prompt detalhado que dá ao modelo contexto completo sobre o que fazer, quais ferramentas chamar e como formatar a saída.
+
+Isso significa que `/aria` não é um script fixo. É um sistema de raciocínio que se adapta: se for manhã, roda o fluxo de briefing completo; se for tarde, faz uma verificação mais leve; se eu pedir algo específico, ele trata disso.
+
+### 2. Servidores MCP
+
+O verdadeiro poder vem dos servidores MCP (Model Context Protocol) rodando na minha máquina. O MCP permite expor qualquer fonte de dados ou API como ferramentas que o Claude pode chamar diretamente.
+
+Eu construí e conectei:
+
+| Servidor MCP | O que faz |
+|--------------|-----------|
+| **ARIA MCP** | Core: scan de projetos, tarefas, briefings, insights |
+| **Neutron** | Finanças pessoais — P&L, orçamento, pagamentos recorrentes |
+| **Docker MCP** | Saúde dos containers, logs, iniciar/parar |
+| **Rastro Pop MCP** | Monitoramento de projetos de clientes (minha stack de microsserviços) |
+| **Google Calendar** | Eventos e agendamento |
+| **WhatsApp MCP** | Receber/enviar mensagens programaticamente |
+| **Memory MCP** | Grafo de conhecimento persistente entre sessões |
+
+Quando rodo `/aria`, o Claude orquestra chamadas entre esses servidores para construir um quadro coerente do meu dia — sem eu precisar fazer nada.
+
+### 3. Hub (O Backend)
+
+Hub é um app privado de Next.js + PostgreSQL que rodo no meu VPS. É o repositório central de dados para:
+
+- Tarefas (substitui o Linear no meu fluxo pessoal)
+- Insights e aprendizados capturados durante sessões
+- Histórico de briefings (para a ARIA ver o que me contou ontem)
+- Agregação de atividade dos projetos
+
+O interessante no Hub é que a ARIA ainda funciona quando ele está offline — ela usa chamadas MCP diretas como fallback. Coloca qualquer escrita na fila local e sincroniza quando voltar online.
+
+## O Sistema de 4 Camadas de Roteamento de Modelos
+
+Uma coisa com que estou particularmente satisfeito: a ARIA roteia diferentes tarefas para diferentes modelos de IA com base na complexidade e no custo.
+
+| Camada | Modelo | Custo | Usado para |
+|--------|--------|-------|------------|
+| 0 | Ollama `llama3.2:3b` (local) | **Grátis** | Commits, resumos, traduções |
+| 1 | Claude Haiku | Mais barato | Buscas rápidas |
+| 2 | Claude Sonnet | Moderado | Programação, features — **padrão** |
+| 3 | Claude Opus | Caro | Arquitetura, auditorias |
+
+Escrever uma mensagem de commit? Vai para o Ollama — grátis, instantâneo, roda localmente. Auditoria de segurança? Sobe para o Opus. Programação do dia a dia fica no Sonnet.
+
+Isso mantém os custos baixos sem sacrificar qualidade onde importa. Estou gastando cerca de R$ 80–100/mês em chamadas de API pelo que, de outra forma, exigiria várias assinaturas de SaaS.
+
+## Como Se Sente na Prática
+
+Aqui está um briefing matinal real, levemente editado:
+
+```
+☀️ BOM DIA, CÉSAR
+
+📅 SEXTA, 20 FEV — 09:14
+
+📋 TAREFAS (4 ativas)
+□ Configurar credenciais Abacate Pay — Menthos [ALTA]
+□ Primeiro post do blog — Aethos Blog [MÉDIA]
+□ Revisar deploy Rastro Pop — [ALTA]
+□ Limpeza de disco no VPS — [BAIXA]
+
+🚀 PROJETOS
+🟢 aethos-blog      — 2h atrás  (build: correções de UX)
+🟡 menthos          — 1d atrás  (deploy: Vercel online)
+🔴 listai-shopee    — 12d atrás (aguardando credenciais do cliente)
+
+💰 NEUTRON: R$ 3.200 receita / R$ 1.100 despesa | +R$ 2.100
+⚠️ Software em 82% do orçamento
+
+🐳 DOCKER: 7 containers rodando, todos saudáveis
+```
+
+Esse é todo o meu contexto em menos de 10 segundos. Sem abas, sem troca de ferramentas, sem copiar e colar. Só `/aria` e pronto.
+
+## O Que Vem Depois para a ARIA
+
+A ARIA está viva e evoluindo. Experimentos em andamento:
+
+- **Alertas proativos** — Notificação no WhatsApp quando um container cai ou um prazo de tarefa chegou
+- **Aprendizado de sessão** — ARIA capturando padrões das sessões e surfaceando-os como insights ao longo do tempo
+- **Previsão financeira** — Integração do Neutron profunda o suficiente para projetar o fluxo de caixa do próximo mês
+- **Interface de voz** — Ditar tarefas e capturar ideias longe do teclado
+
+Vou escrever sobre cada um desses conforme forem sendo construídos. Este blog é tanto um changelog da ARIA quanto um lugar para reflexões mais amplas sobre construir ferramentas e produtos.
+
+## Por Que Construir Você Mesmo?
+
+Porque as ferramentas prontas não te conhecem.
+
+O Notion não sabe que o `aethos-blog` teve commits há 2 horas. O Linear não sabe que seus containers Docker estão saudáveis. O app de calendário não sabe que seu orçamento de software está estourando.
+
+A ARIA sabe tudo isso. Porque eu a construí para isso.
+
+Essa é a premissa. Vamos ver onde vai.
+
+---
+
+*A ARIA ainda não é open source — está fortemente ligada à minha stack e fluxos de trabalho específicos. Mas se você tem curiosidade sobre construir algo parecido, fico feliz em conversar sobre arquitetura. Me encontra no [GitHub](https://github.com/chidekina) ou me chama em [aethostech.com.br](https://aethostech.com.br).*
