@@ -1,0 +1,39 @@
+---
+title: "Hello World — Building ARIA in Public"
+description: "Introducing the Aethos Labs blog, where we document the journey of building ARIA, an AI executive assistant, and everything we learn along the way."
+date: 2026-02-20
+lang: en
+tags: ["aria", "meta", "ai"]
+series: "aria-progress"
+draft: false
+---
+
+# Hello World
+
+Welcome to the Aethos Labs blog.
+
+This is where we document the journey of building **ARIA** — an AI executive assistant that runs on our local infrastructure, coordinates tasks, monitors projects, and helps us ship faster.
+
+## What to expect
+
+- **ARIA Progress** — weekly updates on what got built, what broke, and what we learned
+- **Tech Deep Dives** — how we built specific features (MCP servers, Ollama routing, Hub integrations)
+- **Micro SaaS Learnings** — product and technical lessons from building in the Brazilian market
+- **Essays** — occasional thoughts on dev tools, AI, and indie hacking
+
+## The stack behind ARIA
+
+ARIA is built as a **Model Context Protocol (MCP) server** that runs alongside Claude Code. It connects to:
+
+- A custom **Hub** (Next.js + PostgreSQL) for tasks, insights, and activity
+- **Ollama** for free local LLM calls (commits, translations, summaries)
+- **Docker** for infrastructure monitoring
+- **WhatsApp** for mobile-first interactions
+
+More posts coming soon. Stay tuned.
+
+```typescript
+// ARIA greets you every morning
+const { greeting } = await aria_context();
+console.log(greeting); // "Bom dia, César!"
+```

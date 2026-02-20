@@ -1,0 +1,10 @@
+dist/
+.output/
+node_modules/
+.env
+.env.local
+.env.*.local
+.astro/
+.vscode/
+.DS_Store
+.vercel

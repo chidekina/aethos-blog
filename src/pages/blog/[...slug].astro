@@ -1,0 +1,118 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import readingTime from 'reading-time';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog', ({ data }) => !data.draft);
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post },
+  }));
+}
+
+type Props = { post: CollectionEntry<'blog'> };
+const { post } = Astro.props;
+const { Content } = await post.render();
+
+const stats = readingTime(post.body);
+const readTime = Math.ceil(stats.minutes);
+
+const formattedDate = post.data.date.toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+
+// Series navigation
+const allPosts = await getCollection('blog', ({ data }) => !data.draft);
+const seriesPosts = post.data.series
+  ? allPosts
+      .filter((p) => p.data.series === post.data.series)
+      .sort((a, b) => a.data.date.getTime() - b.data.date.getTime())
+  : [];
+
+const seriesIndex = seriesPosts.findIndex((p) => p.slug === post.slug);
+const prevPost = seriesIndex > 0 ? seriesPosts[seriesIndex - 1] : null;
+const nextPost = seriesIndex < seriesPosts.length - 1 ? seriesPosts[seriesIndex + 1] : null;
+
+const ogImage = `/og/${post.slug}.png`;
+---
+
+<BaseLayout title={post.data.title} description={post.data.description} ogImage={ogImage}>
+  <article>
+    <!-- Post Header -->
+    <header style="margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--color-border);">
+      <h1 style="font-size: 2rem; font-weight: 800; line-height: 1.2; margin-bottom: 1rem; color: var(--color-text);">
+        {post.data.title}
+      </h1>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+        <time style="color: var(--color-text-muted); font-size: 0.875rem;">{formattedDate}</time>
+        <span style="color: var(--color-border);">·</span>
+        <span style="color: var(--color-text-muted); font-size: 0.875rem;">{readTime} min read</span>
+        <span style="color: var(--color-border);">·</span>
+        <span style={`font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; border: 1px solid; 'color: hsl(0,0%,70%); border-color: hsl(0,0%,20%); background: hsl(0,0%,12%);'`}>
+          {post.data.lang.toUpperCase()}
+        </span>
+      </div>
+
+      {post.data.series && (
+        <div style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 1rem;">
+          Part of: <span style="color: var(--color-primary); font-style: italic;">{post.data.series}</span>
+        </div>
+      )}
+
+      <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+        {post.data.tags.map((tag) => (
+          <a
+            href={`/?tag=${tag}`}
+            style="font-size: 0.75rem; color: var(--color-text-muted); background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.2rem 0.5rem; text-decoration: none;"
+          >
+            #{tag}
+          </a>
+        ))}
+      </div>
+    </header>
+
+    <!-- Post Content -->
+    <div class="prose">
+      <Content />
+    </div>
+
+    <!-- Series Navigation -->
+    {seriesPosts.length > 1 && (
+      <nav style="margin-top: 3rem; padding: 1.5rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;">
+        <div style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em;">
+          Series: {post.data.series}
+        </div>
+        <ol style="list-style: none; padding: 0; margin: 0 0 1rem;">
+          {seriesPosts.map((p, i) => (
+            <li style={`padding: 0.3rem 0; font-size: 0.9rem; ${p.slug === post.slug ? 'color: var(--color-primary); font-weight: 600;' : 'color: var(--color-text-muted);'}`}>
+              {i + 1}.{' '}
+              {p.slug === post.slug ? (
+                <span>{p.data.title}</span>
+              ) : (
+                <a href={`/blog/${p.slug}`} style="color: inherit; text-decoration: underline; text-underline-offset: 3px;">
+                  {p.data.title}
+                </a>
+              )}
+            </li>
+          ))}
+        </ol>
+        <div style="display: flex; justify-content: space-between; gap: 1rem;">
+          {prevPost ? (
+            <a href={`/blog/${prevPost.slug}`} style="color: var(--color-primary); text-decoration: none; font-size: 0.875rem;">
+              ← {prevPost.data.title}
+            </a>
+          ) : <span />}
+          {nextPost ? (
+            <a href={`/blog/${nextPost.slug}`} style="color: var(--color-primary); text-decoration: none; font-size: 0.875rem;">
+              {nextPost.data.title} →
+            </a>
+          ) : <span />}
+        </div>
+      </nav>
+    )}
+  </article>
+</BaseLayout>

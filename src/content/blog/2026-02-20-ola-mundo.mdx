@@ -1,0 +1,39 @@
+---
+title: "Olá Mundo — Construindo a ARIA em Público"
+description: "Apresentando o blog da Aethos Labs, onde documentamos a jornada de construir a ARIA, uma assistente executiva com IA, e tudo que aprendemos no caminho."
+date: 2026-02-20
+lang: pt
+tags: ["aria", "meta", "ia"]
+series: "aria-progress"
+draft: false
+---
+
+# Olá Mundo
+
+Bem-vindo ao blog da Aethos Labs.
+
+Aqui documentamos a jornada de construir a **ARIA** — uma assistente executiva com IA que roda na nossa infraestrutura local, coordena tarefas, monitora projetos e ajuda a entregar mais rápido.
+
+## O que esperar
+
+- **Progresso da ARIA** — atualizações do que foi construído, o que quebrou e o que aprendemos
+- **Deep dives técnicos** — como construímos features específicas (servidores MCP, roteamento Ollama, integrações com o Hub)
+- **Aprendizados Micro SaaS** — lições de produto e técnicas construindo para o mercado brasileiro
+- **Ensaios** — pensamentos sobre ferramentas de dev, IA e indie hacking
+
+## A stack por trás da ARIA
+
+A ARIA é construída como um **servidor MCP (Model Context Protocol)** que roda junto com o Claude Code. Ela se conecta a:
+
+- Um **Hub** customizado (Next.js + PostgreSQL) para tarefas, insights e atividade
+- **Ollama** para chamadas LLM locais gratuitas (commits, traduções, resumos)
+- **Docker** para monitoramento de infraestrutura
+- **WhatsApp** para interações mobile-first
+
+Mais posts em breve. Fique ligado.
+
+```typescript
+// ARIA te sauda toda manhã
+const { greeting } = await aria_context();
+console.log(greeting); // "Bom dia, César!"
+```

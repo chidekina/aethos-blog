@@ -1,0 +1,157 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import readingTime from 'reading-time';
+
+const allPosts = await getCollection('blog', ({ data }) => !data.draft);
+const posts = allPosts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
+---
+
+<BaseLayout>
+  <!-- Hero -->
+  <div style="margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--color-border);">
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+      <span style="color: var(--color-primary); font-size: 1.5rem;">◆</span>
+      <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-text);">Aethos Labs</h1>
+    </div>
+    <p style="color: var(--color-text-muted); font-size: 1rem; max-width: 48ch;">
+      Engineering blog. AI experiments. Micro SaaS learnings.
+    </p>
+  </div>
+
+  <!-- Filters -->
+  <div id="filters" style="margin-bottom: 2rem;">
+    <div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      <span style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 0.25rem;">Lang</span>
+      {['all', 'en', 'pt'].map((l) => (
+        <button
+          class="lang-btn"
+          data-lang={l}
+          style={`font-size: 0.8rem; padding: 0.25rem 0.75rem; border-radius: 999px; border: 1px solid var(--color-border); background: transparent; cursor: pointer; color: var(--color-text-muted); ${l === 'all' ? 'border-color: var(--color-primary); color: var(--color-primary);' : ''}`}
+        >
+          {l === 'all' ? 'All' : l.toUpperCase()}
+        </button>
+      ))}
+    </div>
+
+    {allTags.length > 0 && (
+      <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+        <span style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 0.25rem;">Tags</span>
+        {allTags.map((tag) => (
+          <button
+            class="tag-btn"
+            data-tag={tag}
+            style="font-size: 0.75rem; padding: 0.2rem 0.55rem; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-muted); cursor: pointer; color: var(--color-text-muted);"
+          >
+            #{tag}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+
+  <!-- Post List -->
+  <div id="post-list">
+    {posts.length === 0 ? (
+      <p style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;">No posts yet. Check back soon.</p>
+    ) : (
+      posts.map((post) => {
+        const rt = Math.ceil(readingTime(post.body).minutes);
+        const date = post.data.date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        return (
+          <article
+            class="post-item"
+            data-lang={post.data.lang}
+            data-tags={post.data.tags.join(',')}
+            style="padding: 1.5rem 0; border-bottom: 1px solid var(--color-border);"
+          >
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+              <a href={`/blog/${post.slug}`} style="text-decoration: none; flex: 1;">
+                <h2 style="font-size: 1.1rem; font-weight: 700; color: var(--color-text); margin: 0; line-height: 1.4;">{post.data.title}</h2>
+              </a>
+              <span style={`flex-shrink: 0; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid; 'color: hsl(0,0%,70%); border-color: hsl(0,0%,20%); background: hsl(0,0%,12%);'`}>
+                {post.data.lang.toUpperCase()}
+              </span>
+            </div>
+            <p style="color: var(--color-text-muted); font-size: 0.9rem; margin: 0 0 0.75rem; line-height: 1.6;">{post.data.description}</p>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <time style="font-size: 0.8rem; color: var(--color-text-muted);">{date}</time>
+              <span style="color: var(--color-border);">·</span>
+              <span style="font-size: 0.8rem; color: var(--color-text-muted);">{rt} min read</span>
+              <span style="color: var(--color-border);">·</span>
+              <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+                {post.data.tags.map((tag) => (
+                  <span style="font-size: 0.7rem; color: var(--color-text-muted); background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.15rem 0.4rem;">#{tag}</span>
+                ))}
+              </div>
+            </div>
+          </article>
+        );
+      })
+    )}
+  </div>
+  <div id="no-results" style="display: none; color: var(--color-text-muted); text-align: center; padding: 3rem 0;">No posts match this filter.</div>
+</BaseLayout>
+
+<script>
+  const langBtns = document.querySelectorAll<HTMLButtonElement>('.lang-btn');
+  const tagBtns = document.querySelectorAll<HTMLButtonElement>('.tag-btn');
+  const postItems = document.querySelectorAll<HTMLElement>('.post-item');
+  const noResults = document.getElementById('no-results');
+
+  let activeLang = 'all';
+  let activeTag = '';
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('lang')) activeLang = params.get('lang')!;
+  if (params.get('tag')) activeTag = params.get('tag')!;
+
+  function applyFilters() {
+    let visible = 0;
+    postItems.forEach((item) => {
+      const lang = item.dataset.lang ?? '';
+      const tags = item.dataset.tags?.split(',') ?? [];
+      const langMatch = activeLang === 'all' || lang === activeLang;
+      const tagMatch = !activeTag || tags.includes(activeTag);
+      item.style.display = langMatch && tagMatch ? '' : 'none';
+      if (langMatch && tagMatch) visible++;
+    });
+    if (noResults) noResults.style.display = visible === 0 ? 'block' : 'none';
+    const p = new URLSearchParams();
+    if (activeLang !== 'all') p.set('lang', activeLang);
+    if (activeTag) p.set('tag', activeTag);
+    const qs = p.toString();
+    history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+  }
+
+  function highlightLang() {
+    langBtns.forEach((btn) => {
+      const active = btn.dataset.lang === activeLang;
+      btn.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
+      btn.style.color = active ? 'var(--color-primary)' : 'var(--color-text-muted)';
+    });
+  }
+
+  function highlightTag() {
+    tagBtns.forEach((btn) => {
+      const active = btn.dataset.tag === activeTag;
+      btn.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
+      btn.style.color = active ? 'var(--color-primary)' : 'var(--color-text-muted)';
+    });
+  }
+
+  langBtns.forEach((btn) => btn.addEventListener('click', () => {
+    activeLang = btn.dataset.lang ?? 'all';
+    highlightLang(); applyFilters();
+  }));
+
+  tagBtns.forEach((btn) => btn.addEventListener('click', () => {
+    const tag = btn.dataset.tag ?? '';
+    activeTag = activeTag === tag ? '' : tag;
+    highlightTag(); applyFilters();
+  }));
+
+  highlightLang(); highlightTag(); applyFilters();
+</script>
