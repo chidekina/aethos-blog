@@ -7,7 +7,17 @@
       "Bash(done)",
       "Bash(head:*)",
       "Skill(commit-pro)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:blog.aethostech.com.br)",
+      "Bash(bun run build:*)",
+      "Bash(bun run dev:*)",
+      "Bash(git -C /home/hidekina/projetos/aethos-ideas/aethos-blog diff --stat HEAD)",
+      "Bash(git add:*)",
+      "Bash(bash /home/hidekina/.claude/hooks/commit-guard.sh)",
+      "Bash(echo:*)",
+      "Bash(git -C /home/hidekina/projetos/aethos-ideas/aethos-blog add src/pages/index.astro)",
+      "Bash(git -C /home/hidekina/projetos/aethos-ideas/aethos-blog diff --cached --stat)",
+      "Bash(git -C:*)"
     ]
   }
 }

@@ -1,43 +1,61 @@
-# Astro Starter Kit: Minimal
+# Aethos Tech Blog
 
-```sh
-bun create astro@latest -- --template minimal
+Technical blog by [Aethos Tech](https://aethos.com.br) — articles on micro-SaaS, AI tooling, full-stack engineering, and building in Brazil.
+
+Built with **Astro** + **TypeScript**. Bilingual: EN 🇺🇸 / PT-BR 🇧🇷.
+
+## Features
+
+- EN/PT-BR language toggle with localStorage persistence
+- Animated background and smooth theme transitions
+- Dark/light mode
+- Collapsed tag system on post listings
+- SEO: OpenGraph, Twitter meta, sitemap, robots.txt
+- Mobile-responsive navbar
+- MDX posts with frontmatter
+
+## Structure
+
+```
+src/
+├── content/blog/        # MDX posts (YYYY-MM-DD-slug.mdx)
+├── layouts/
+│   └── BaseLayout.astro # Main layout with theme + i18n
+├── pages/
+│   ├── index.astro      # Post listing
+│   ├── about.astro
+│   └── blog/[...slug].astro
+└── styles/global.css
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+**Post naming convention:**
+- `YYYY-MM-DD-slug.mdx` → English
+- `YYYY-MM-DD-slug-pt.mdx` or `YYYY-MM-DD-slug-ptbr.mdx` → Portuguese
 
-## 🚀 Project Structure
+## Commands
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```bash
+bun install       # Install dependencies
+bun dev           # Dev server at localhost:4321
+bun build         # Build to ./dist/
+bun preview       # Preview production build
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Writing Posts
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+Create a new `.mdx` file in `src/content/blog/`:
 
-Any static assets, like images, can be placed in the `public/` directory.
+```mdx
+---
+title: "Post Title"
+description: "Short description for SEO and listing"
+pubDate: 2026-02-21
+tags: ["astro", "tutorial"]
+lang: "en"
+---
 
-## 🧞 Commands
+Post content here...
+```
 
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `bun install`             | Installs dependencies                            |
-| `bun dev`             | Starts local dev server at `localhost:4321`      |
-| `bun build`           | Build your production site to `./dist/`          |
-| `bun preview`         | Preview your build locally, before deploying     |
-| `bun astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `bun astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Required frontmatter: `title`, `description`, `pubDate`, `lang`.
+Optional: `tags`, `heroImage`, `draft`.
