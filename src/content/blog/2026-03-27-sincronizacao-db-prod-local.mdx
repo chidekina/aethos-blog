@@ -1,0 +1,141 @@
+---
+title: "Automatizando Sincronização Prod→Local para 7 Bancos Postgres"
+description: "Como criei um cron diário que puxa todos os bancos de produção para a máquina local — com restore seguro para FKs, lock read-only, lógica de retry e relatório de sync no briefing da ARIA."
+date: 2026-03-27
+lang: pt
+tags: [devops, postgres, bash, infrastructure, indie-hacking]
+translationSlug: 2026-03-27-prod-to-local-db-sync
+draft: false
+---
+
+Tenho 7 bancos Postgres em produção rodando num único VPS. Por um tempo, depurar problemas de produção significava ou fazer SSH e rodar queries ao vivo — o que é arriscado — ou fazer dump e restore manualmente do banco que precisava, o que é tedioso.
+
+Finalmente construí uma solução adequada: um cron diário que sincroniza os 7 bancos para o ambiente local, automaticamente. Veja como funciona e o que aprendi durante a construção.
+
+## O Objetivo
+
+Todo dia de manhã, quero uma cópia local de cada banco de produção, com lock read-only, pronta para consulta. Se a sync falhar, quero saber antes de começar a trabalhar — não no meio de uma sessão de debug.
+
+Os bancos: `menthos`, `aethos-pilot`, `coda-ce`, `hub`, `forge`, `govisales`, `aethos-lab`.
+
+## Por Que Não Usar `pg_dump --clean`?
+
+Meu primeiro instinto foi usar `pg_restore --clean` para dropar e recriar objetos no lugar. Isso falha por causa de constraints de foreign key.
+
+Quando o Postgres tenta dropar uma tabela que tem referências FK de outras tabelas, gera erro. O flag `--clean` dropa objetos na ordem do dump, não na ordem de dependências. A abordagem correta é **dropar e recriar o banco inteiro** antes do restore:
+
+```bash
+psql -h localhost -p $LOCAL_PORT -U postgres -c "DROP DATABASE IF EXISTS $DB_NAME;"
+psql -h localhost -p $LOCAL_PORT -U postgres -c "CREATE DATABASE $DB_NAME;"
+pg_restore -h localhost -p $LOCAL_PORT -U postgres -d $DB_NAME "$DUMP_FILE"
+```
+
+Sem erros de FK. Sempre.
+
+## Lock Read-Only Após o Restore
+
+Após restaurar, faço lock do banco para evitar writes acidentais no que é essencialmente um espelho de prod:
+
+```bash
+psql -h localhost -p $LOCAL_PORT -U postgres -d $DB_NAME \
+  -c "ALTER DATABASE $DB_NAME SET default_transaction_read_only = on;"
+```
+
+Isso não impede leituras nem inspeção de schema — apenas garante que qualquer `INSERT`, `UPDATE` ou `DELETE` vai gerar um erro limpo. Útil quando o músculo da memória te traí durante debug.
+
+## O Gotcha Bash Que Me Custou 2 Horas
+
+Usei `set -euo pipefail` para segurança, e tinha um contador para rastrear falhas:
+
+```bash
+# ❌ Quebra com set -e quando FAILED_COUNT=0
+(( FAILED_COUNT++ ))
+
+# ✅ Funciona corretamente
+FAILED_COUNT=$((FAILED_COUNT + 1))
+```
+
+`(( expr ))` retorna exit code 1 quando o resultado é 0. Com `set -e`, isso encerra o script imediatamente. Passei duas horas confuso porque o script parava silenciosamente na primeira iteração, quando ainda não tinha ocorrido nenhuma falha.
+
+Use `$((var + 1))` para aritmética em scripts com `set -e`.
+
+## Lógica de Retry
+
+Instabilidades de rede acontecem. Cada sync tem 3 tentativas antes de ser marcada como falha:
+
+```bash
+ATTEMPTS=0
+SUCCESS=false
+
+while [ $ATTEMPTS -lt 3 ] && [ "$SUCCESS" = "false" ]; do
+  if sync_database "$DB_NAME" "$LOCAL_PORT"; then
+    SUCCESS=true
+  else
+    ATTEMPTS=$((ATTEMPTS + 1))
+    log "Tentativa $ATTEMPTS falhou para $DB_NAME"
+    sleep 5
+  fi
+done
+
+if [ "$SUCCESS" = "false" ]; then
+  echo "$DB_NAME" >> "$FAILED_QUEUE"
+fi
+```
+
+Bancos com falha são registrados em `~/.aria/sync-failed-queue.json` para revisão manual.
+
+## Relatório de Sync para a ARIA
+
+Após o script executar, ele grava um `sync-report.json`:
+
+```json
+{
+  "timestamp": "2026-03-27T02:00:05Z",
+  "ok": 7,
+  "failed": 0,
+  "skipped": 0,
+  "results": {
+    "menthos": "ok",
+    "aethos-pilot": "ok",
+    "hub": "ok"
+  }
+}
+```
+
+A ARIA lê esse arquivo durante o briefing matinal. Se `failed > 0`, o alerta aparece antes de qualquer outra informação. Já detectei problemas de conectividade com o VPS desta forma antes de abrir um único terminal.
+
+## Configuração do Cron
+
+```bash
+# Executa às 02:00 todo dia
+0 2 * * * /home/user/scripts/sync-prod-dbs.sh >> /home/user/.aria/logs/db-sync.log 2>&1
+```
+
+02:00 é intencional — baixo tráfego, sem sessões ativas, e a sync está concluída bem antes do briefing às 07:00.
+
+## Criação Automática de Containers Locais Ausentes
+
+Se um banco ainda não tem um container Postgres local, o script cria um:
+
+```bash
+if ! docker ps --format '{{.Names}}' | grep -q "$CONTAINER_NAME"; then
+  docker run -d \
+    --name "$CONTAINER_NAME" \
+    -e POSTGRES_PASSWORD=localdev \
+    -p "$LOCAL_PORT:5432" \
+    postgres:16-alpine
+  sleep 3
+fi
+```
+
+Isso significa que a primeira sync de um projeto novo funciona sem setup manual.
+
+## O Que Faria Diferente
+
+O script cresceu de forma orgânica e tem algumas arestas. Se reescrevesse hoje:
+
+- **Usar arquivo de config** em vez de arrays hardcoded. Adicionar um novo banco atualmente exige editar o script.
+- **SSH multiplexing** para performance. Cada `pg_dump` abre um novo túnel SSH. Com ControlMaster, reutilizariam a mesma conexão.
+- **Logs estruturados** (JSON) em vez de texto plano. A ARIA consegue parsear JSON; texto plano exige regex.
+
+Não é perfeito, mas roda toda noite sem intervenção, e já encontrei três anomalias de produção consultando espelhos locais que teria perdido de outra forma.

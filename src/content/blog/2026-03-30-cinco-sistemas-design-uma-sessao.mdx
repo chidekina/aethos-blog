@@ -1,0 +1,93 @@
+---
+title: "Cinco Sistemas de Design em Uma Sessão: O Que Aprendi"
+description: "Redesenhei 5 apps diferentes em uma única sessão, cada um com identidade visual completamente distinta. Aqui está o raciocínio de design por trás de cada um e o que o processo revelou sobre design tokens."
+date: 2026-03-30
+lang: pt
+tags: [design, frontend, css, tailwind, indie-hacking]
+translationSlug: 2026-03-30-five-design-systems-one-session
+draft: false
+---
+
+Na semana passada me sentei para redesenhar cinco produtos Aethos em uma sessão. Cada um precisava de uma identidade visual completamente diferente — mesma stack técnica (Tailwind v4, shadcn/ui), sensação completamente diferente.
+
+A restrição foi esclarecedora. Quando você está se movendo rapidamente entre cinco estéticas, não dá para pensar demais em nenhuma decisão isolada. Você precisa se comprometer. Aqui está o que construí e o que aprendi.
+
+## Os Cinco Projetos
+
+### Forge — Terminal Industrial
+
+**Conceito:** Uma ferramenta de geração de código com metáfora de forja. Deve parecer que você está fundindo algo em metal.
+
+**Decisões:**
+- Background: `#0a0a0a` — preto puro, não cinza escuro
+- Fonte: Space Mono (UI) + Lora (prosa). O contraste entre monospace e serif cria tensão que combina com o tom industrial
+- Primária: `oklch(0.68 0.18 45)` — laranja queimado que lê como metal em fusão sem ser caricato
+- Efeitos CSS: overlay de scanlines via gradiente repetido, classe utilitária de glow para elementos interativos
+- Tipografia: caixa alta, espaçamento largo entre letras (`tracking-[0.2em]`), `clamp(3.5rem, 10vw, 10rem)` para o heading do hero
+
+As scanlines quase foram cortadas — pareciam um truque visual. As mantive com opacidade muito baixa (3%) e leem como textura, não decoração.
+
+### Menthos — Executivo Bauhaus
+
+**Conceito:** Uma ferramenta de geração de propostas usada por agências criativas e consultores. Deve parecer um estúdio criativo premium, não mais um dashboard SaaS.
+
+**Decisões:**
+- Background: `oklch(0.97 0.008 85)` — off-white com virada quente amarela, não branco puro
+- Fonte: Playfair Display (headings) + Source Serif 4 (corpo). Stack totalmente serifada, sem sans-serif
+- Primária: `oklch(0.72 0.14 82)` — ouro que funciona tanto em tamanhos pequenos quanto grandes
+- Textura: overlay de grain CSS usando filtro SVG de ruído
+- Prova social: contador "12.847 propostas criadas" — dados reais exibidos no hero
+
+O overlay de grain foi a mudança de maior alavancagem. Com 15% de opacidade faz o background parecer papel. Sem ele, a cor creme simplesmente parece um branco mal feito.
+
+### Code & Dragons — Dark Fantasy
+
+**Conceito:** Uma plataforma gamificada de aprendizado de programação. Deve parecer um manuscrito antigo descoberto numa masmorra, mas legível.
+
+**Decisões:**
+- Background: `#0f0d0b` — quase preto com subtom marrom, não tons frios
+- Fonte: IM Fell English (headings — genuinamente medieval, carregada do Google Fonts) + Courier Prime (código)
+- Primária: `oklch(0.72 0.16 75)` — ouro que renderiza bem no background escuro
+- Animações: keyframe `torch-flicker` para efeito de luz ambiente, `xp-float` para notificações de ganho de XP
+- CSS: textura de ruído + vinheta (`radial-gradient` escurecendo as bordas)
+
+A vinheta foi a decisão-chave aqui. Sem ela, a textura parece barata. Com ela, a página parece que você está olhando para algo iluminado por tochas.
+
+### LDB Academy — Luxo Institucional
+
+**Conceito:** Plataforma de educação jurídica para advogados brasileiros. Precisa sinalizar autoridade, tradição e qualidade.
+
+**Decisões:**
+- Background: `oklch(0.977 0.005 80)` — branco quente, quase idêntico ao Menthos mas levemente menos saturado
+- Fonte: Cormorant Garamond (headings — condensada, elegante, distintamente jurídica) + Karla (corpo — sans limpa para legibilidade)
+- Primária: `oklch(0.68 0.14 78)` — ouro, levemente mais escuro que o Menthos para mais gravitas
+- Tipografia: headings em itálico, nome da marca em serif itálico apenas — sem elementos decorativos
+- Filosofia: zero animações, zero truques. Autoridade é comunicada através da contenção
+
+Este foi o mais difícil de acertar porque "menos é mais" é mais difícil de executar do que "mais é mais". Toda vez que queria adicionar algo, me perguntava: isso comunica autoridade ou o enfraquece?
+
+### Aethos Pilot — Cartografia e Território
+
+**Conceito:** Análise de território eleitoral para políticos municipais. Dados pesados, uso em campo, precisa funcionar no celular à luz solar direta.
+
+**Decisões:**
+- Background: `oklch(0.09 0.01 155)` — background muito escuro com tinte verde, evoca mapas de satélite
+- Fonte: Instrument Serif (headings) + DM Mono (dados/números)
+- Primária: `oklch(0.65 0.18 145)` — verde de marcador de mapa
+- CSS: background de grade de mapa usando `repeating-linear-gradient` com baixa opacidade
+- Animação: efeito de ping `location-dot` no CTA — um círculo pulsante como marcador de GPS
+- Contraste: projetado para uso externo. Todo texto supera WCAG AA, a maioria supera AAA
+
+O background de grade era quase invisível no desktop mas funcionou bem no mobile onde o viewport é menor e a densidade da grade parecia certa.
+
+## O Que o Processo Revelou
+
+**Design tokens são estruturais.** Mover entre cinco estéticas numa sessão tornou óbvio que as variáveis não são apenas conveniência — elas são o design. A sensação inteira de cada produto vem de cerca de 8 valores: background, foreground, primary, radius, dois nomes de fonte e dois ou três efeitos CSS customizados.
+
+**As melhores decisões de design são restrições.** "Sem sans-serif no LDB Academy" e "sem animações no LDB Academy" são restrições, não escolhas. Restrições forçam cada elemento restante a trabalhar mais.
+
+**oklch vale aprender.** Todas as cinco primárias são cores oklch. O motivo: os valores de chroma e lightness do oklch são perceptualmente uniformes, então você pode trocar matizes mantendo o mesmo peso visual. O ouro no Menthos e o ouro no Code & Dragons parecem igualmente prominentes mesmo sendo matizes diferentes, porque mantive chroma e lightness constantes. Com hex, você teria que fazer no olho.
+
+**Textura supera cor para diferenciação.** Menthos e LDB Academy têm backgrounds quase idênticos. O que os faz parecer diferentes é o overlay de grain no Menthos e a ausência dele no LDB Academy. Textura é uma dimensão de diferenciação que a maioria dos sistemas de design ignora.
+
+A sessão levou cerca de 4 horas para os cinco. Duas semanas depois, olhando para eles lado a lado, ainda são as decisões certas.

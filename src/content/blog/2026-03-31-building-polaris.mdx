@@ -1,0 +1,79 @@
+---
+title: "Building Polaris: Electoral Intelligence for Brazilian Municipal Politicians"
+description: "The architecture behind a territory scoring platform for Brazilian politicians — priority score algorithm, three-tier model, and why this problem is interesting from a data engineering perspective."
+date: 2026-03-31
+lang: en
+tags: [product, architecture, indie-hacking, brazil, data]
+translationSlug: 2026-03-31-construindo-polaris
+draft: false
+---
+
+Polaris is a platform I've been building for municipal politicians in Brazil. The core product: given a politician's territory (city, district, or ward), score every sub-territory by electoral priority so they know where to focus their time.
+
+This post is about the technical architecture and the interesting problems it surfaces — not a pitch.
+
+## The Core Algorithm
+
+Every territory gets a **priority score** composed of three dimensions:
+
+```
+priority = vote_potential × trend_factor × abstention_weight
+```
+
+**Vote potential** — estimated votes available in the territory based on registered voters, historical turnout, and demographic alignment with the politician's profile. This is the ceiling.
+
+**Trend factor** — how that territory has voted in recent elections relative to the politician's party or coalition. A territory trending favorable gets a multiplier above 1.0; one trending against gets below 1.0. The trend is calculated over the last two election cycles to smooth noise.
+
+**Abstention weight** — territories with high abstention rates get a boost. High abstention = untapped potential. If you can mobilize 20% of habitual non-voters in a high-abstention zone, the payoff can exceed winning over a contested low-abstention area.
+
+The output is a normalized 0–100 score per territory, ranked. A politician opens Polaris and sees: "Your top 5 priority territories this week are X, Y, Z..."
+
+## Data Sources
+
+Brazil has surprisingly good public electoral data. All of it is open, free, and available from the TSE (Tribunal Superior Eleitoral):
+
+- Historical voting results by section (zona + seção), going back 20+ years
+- Registered voter counts by municipality and electoral zone
+- Candidate and party registration data
+
+The challenge isn't availability — it's normalization. Municipality names change, zone numbering changes between elections, and the CSV formats from 2002 look nothing like 2024. About 40% of the pipeline is cleaning and normalizing historical data before it can be analyzed.
+
+## Architecture
+
+The backend is a FastAPI service (`polaris-api`) with a PostgreSQL database. The frontend is a Next.js 14 app (`polaris-web`) that consumes the API.
+
+The separation was a deliberate decision. The API does the heavy lifting — scoring, trend calculation, data normalization — and the frontend is a thin consumer. This means the algorithm can be iterated independently of the UI, and eventually, other frontends (mobile, third-party integrations) can consume the same scores.
+
+Key tables:
+- `territories` — normalized hierarchy: state → mesoregion → microregion → municipality → zone → section
+- `election_results` — historical votes by candidate, party, territory, election cycle
+- `territory_scores` — pre-computed scores refreshed on a schedule (not computed on-demand)
+- `politicians` — platform users with their territory configuration and tier
+
+## Three Tiers
+
+The platform has three tiers based on the scope of electoral mandate:
+
+| Tier | Target | Territory scope |
+|------|--------|----------------|
+| Starter | Vereador (city councillor) | Municipality |
+| Pro | Deputado Estadual (state rep) | State region |
+| Elite | Deputado Federal (federal rep) | Multi-state |
+
+The data is the same; the territory scope and dashboard panels differ. A vereador cares about neighborhoods and zones within their city. A federal deputy cares about regions across multiple states. The scoring algorithm is identical — the geography changes.
+
+## The Interesting Hard Parts
+
+**Pre-computing vs. on-demand scoring.** The first version computed scores on each API request. At small scale, fine. As data grows, a single score request touches hundreds of thousands of historical records. I moved to pre-computed scores refreshed nightly, with a "force refresh" endpoint for when a politician needs current data after a major event.
+
+**Abstention data granularity.** Abstention rates from TSE are available at zone level but not always at section level for older elections. The algorithm falls back gracefully — if section-level abstention isn't available, it uses zone-level averages. The score is less precise but still useful.
+
+**Coalition vs. party.** Brazilian politics has fluid coalitions. A politician might run with party A but in a coalition with parties B, C, and D. The trend calculation needs to account for the full coalition's historical performance, not just the party — otherwise the scores are misleading in municipalities where the politician's party is weak but the coalition is strong.
+
+## What's Next
+
+The scoring algorithm is good enough to be useful. The next phase is making the insights more actionable: not just "territory X is priority 1" but "in territory X, 34% of your potential voters are women aged 35–55 who historically vote for health and education-focused candidates." That requires demographic layering on top of the electoral data.
+
+Brazil's IBGE (statistics bureau) publishes detailed demographic data at the setor censitário level, which maps roughly to electoral sections. The join is imperfect but workable.
+
+Electoral data engineering isn't a solved problem. That's what makes it interesting.

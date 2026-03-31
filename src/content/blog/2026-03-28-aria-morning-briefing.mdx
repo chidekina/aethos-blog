@@ -1,0 +1,101 @@
+---
+title: "How ARIA's Morning Briefing Works: From Zero to Context in 8 Seconds"
+description: "A walk through the parallel fetch architecture behind ARIA's daily briefing — tasks, Docker health, finances, calendar, and stale projects, assembled in under 10 seconds every morning."
+date: 2026-03-28
+lang: en
+tags: [aria, devtools, architecture, mcp, productivity]
+series: aria-progress
+translationSlug: 2026-03-28-briefing-matinal-aria
+draft: false
+---
+
+Every morning I type `/aria` and get a full situational report in about 8 seconds. Tasks with priorities, Docker container health, financial summary, calendar events, stale projects, DB sync status. Everything I need to decide what to work on first.
+
+This didn't happen by accident. There's a specific fetch architecture behind it that's worth explaining, because the naive approach is about 3x slower.
+
+## The Naive Approach (Sequential)
+
+The obvious implementation: fetch tasks, wait. Fetch Docker status, wait. Fetch finances, wait. Fetch calendar, wait.
+
+With 4 data sources averaging 2 seconds each, that's 8 seconds of wall time. On a slow morning when the VPS is sluggish, it can hit 15.
+
+## The Parallel Approach
+
+ARIA fires all MCP tool calls simultaneously:
+
+```
+aria_context()         ─┐
+fin_summary()           ├── all in parallel
+gcalendar.list-events() ├──
+aria_hub_data(...)      ─┘
+```
+
+Total time ≈ max(individual times), not sum. In practice: 6–8 seconds regardless of how many sources there are.
+
+The MCP protocol makes this natural. Each tool call is a separate HTTP request; there's no reason to serialize them unless one depends on another's output.
+
+## What Gets Fetched
+
+**`aria_context`** — the metadata layer. Current time, day of week, period (morning/afternoon/evening), active task preview, Hub connectivity status, offline queue depth. This determines what else to show and how to frame it.
+
+**`aria_hub_data(["summary", "tasks", "docker"])`** — three sub-calls against the Hub API: open tasks with priorities, Docker container list with health status, and project summary. Batched into one MCP call to avoid triple round-trips.
+
+**`fin_summary`** — current month income, expenses, balance from Neutron. Surfaces overspending alerts if any category is >80% of budget, and upcoming recurring payments within 5 days.
+
+**`gcalendar.list-events`** — today's and tomorrow's calendar events. I use Google Calendar for client meetings and deployment windows.
+
+## The Conditional Hub Block
+
+Not everything runs unconditionally. After the parallel fetch, there's a decision:
+
+```
+Hub online?
+  → aria_hub_data already returned data — render tasks + Docker
+Hub offline?
+  → fall back to aria_project_scan + local docker ps
+```
+
+The Hub goes offline sometimes — usually when I'm working on it. The fallback keeps the briefing useful even when the API isn't responding.
+
+## Stale Projects and DB Sync
+
+Two more checks run after the main parallel block:
+
+**`aria_stale_projects`** scans all repos under `~/projetos/` and returns any that haven't had a commit in >7 days. With 50+ repos, this would be noise — so the briefing only surfaces it if count > 0, with a single line: `⚠️ N stale projects — /aria stale`.
+
+**`sync-report.json`** is read directly from disk. If the overnight DB sync had failures, that alert appears before anything else. Disk reads are fast; this doesn't add to the parallel fetch time.
+
+## GSD Project State
+
+If any project has a `.planning/STATE.md` file (created by the GSD workflow), the briefing shows the current phase and last activity:
+
+```
+## 🔧 Active GSD Projects
+- falatio: Phase 3/5 — Frontend | Last: 2026-03-28
+```
+
+This is a Glob + file read, not an API call. ARIA scans `~/projetos/*/.planning/STATE.md` and reads the `Current Position` section from each one found. Fast and doesn't depend on any external service being up.
+
+## Evening Briefing
+
+The evening briefing runs the same parallel fetch, but with different tools:
+
+```
+aria_daily_summary()       ─┐
+aria_list_insights(days=1)  ├── parallel
+aria_session_report()       ├──
+fin_summary()               ─┘
+```
+
+After assembling the data, it does two write-back operations:
+
+1. Appends a one-line summary to each active `STATE.md` under `## Session Continuity`
+2. Writes the full briefing to a daily Obsidian note at `~/projetos/hub/docs/obsidian/ARIA/Daily/YYYY-MM-DD.md`
+
+The goal is that tomorrow morning's briefing has context about what happened today, without me having to remember anything.
+
+## The Insight Capture Loop
+
+One thing the briefing doesn't do: it doesn't tell me *what* to do. It surfaces state. What to prioritize is still a judgment call.
+
+What it does change: I start every work session with the same information, in the same format, with no setup time. The first decision is always informed. That's worth the 8 seconds.
