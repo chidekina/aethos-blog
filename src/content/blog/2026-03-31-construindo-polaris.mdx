@@ -1,0 +1,79 @@
+---
+title: "Construindo o Polaris: Inteligência Eleitoral para Políticos Municipais Brasileiros"
+description: "A arquitetura por trás de uma plataforma de scoring de territórios para políticos brasileiros — algoritmo de score de prioridade, modelo de três tiers e por que este problema é interessante do ponto de vista de engenharia de dados."
+date: 2026-03-31
+lang: pt
+tags: [product, architecture, indie-hacking, brazil, data]
+translationSlug: 2026-03-31-building-polaris
+draft: false
+---
+
+O Polaris é uma plataforma que tenho construído para políticos municipais no Brasil. O produto central: dado o território de um político (cidade, distrito ou bairro), pontuar cada subterritório por prioridade eleitoral para que ele saiba onde focar seu tempo.
+
+Este post é sobre a arquitetura técnica e os problemas interessantes que ela levanta — não é um pitch.
+
+## O Algoritmo Central
+
+Cada território recebe um **score de prioridade** composto por três dimensões:
+
+```
+prioridade = potencial_votos × fator_tendencia × peso_abstencao
+```
+
+**Potencial de votos** — votos estimados disponíveis no território com base em eleitores registrados, histórico de comparecimento e alinhamento demográfico com o perfil do político. Esse é o teto.
+
+**Fator tendência** — como esse território votou nas eleições recentes em relação ao partido ou coligação do político. Um território com tendência favorável recebe multiplicador acima de 1.0; um com tendência contrária recebe abaixo de 1.0. A tendência é calculada nos últimos dois ciclos eleitorais para suavizar ruído.
+
+**Peso abstenção** — territórios com altas taxas de abstenção recebem bônus. Alta abstenção = potencial não aproveitado. Se você consegue mobilizar 20% de eleitores habituais que não votam numa zona de alta abstenção, o retorno pode superar conquistar uma área contestada de baixa abstenção.
+
+O resultado é um score normalizado de 0–100 por território, em ranking. Um político abre o Polaris e vê: "Seus 5 territórios prioritários desta semana são X, Y, Z..."
+
+## Fontes de Dados
+
+O Brasil tem dados eleitorais públicos surpreendentemente bons. Todos abertos, gratuitos e disponíveis no TSE (Tribunal Superior Eleitoral):
+
+- Resultados históricos de votação por seção (zona + seção), retroativos a 20+ anos
+- Contagem de eleitores registrados por município e zona eleitoral
+- Dados de registro de candidatos e partidos
+
+O desafio não é disponibilidade — é normalização. Nomes de municípios mudam, a numeração de zonas muda entre eleições, e os formatos CSV de 2002 não têm nada a ver com 2024. Cerca de 40% do pipeline é limpeza e normalização de dados históricos antes que possam ser analisados.
+
+## Arquitetura
+
+O backend é um serviço FastAPI (`polaris-api`) com banco de dados PostgreSQL. O frontend é um app Next.js 14 (`polaris-web`) que consome a API.
+
+A separação foi uma decisão deliberada. A API faz o trabalho pesado — scoring, cálculo de tendências, normalização de dados — e o frontend é um consumer magro. Isso significa que o algoritmo pode ser iterado independentemente da UI, e eventualmente outros frontends (mobile, integrações de terceiros) podem consumir os mesmos scores.
+
+Tabelas principais:
+- `territories` — hierarquia normalizada: estado → mesorregião → microrregião → município → zona → seção
+- `election_results` — votos históricos por candidato, partido, território, ciclo eleitoral
+- `territory_scores` — scores pré-computados atualizados por agendamento (não computados sob demanda)
+- `politicians` — usuários da plataforma com sua configuração de território e tier
+
+## Três Tiers
+
+A plataforma tem três tiers baseados no escopo do mandato eleitoral:
+
+| Tier | Público | Escopo territorial |
+|------|---------|-------------------|
+| Starter | Vereador | Município |
+| Pro | Deputado Estadual | Região estadual |
+| Elite | Deputado Federal | Multi-estado |
+
+Os dados são os mesmos; o escopo territorial e os painéis do dashboard diferem. Um vereador se preocupa com bairros e zonas dentro de seu município. Um deputado federal se preocupa com regiões em múltiplos estados. O algoritmo de scoring é idêntico — a geografia muda.
+
+## As Partes Difíceis Interessantes
+
+**Pré-computação vs. computação sob demanda.** A primeira versão computava scores em cada requisição de API. Em pequena escala, funcionava. À medida que os dados crescem, uma única requisição de score toca centenas de milhares de registros históricos. Migrei para scores pré-computados atualizados à noite, com endpoint de "force refresh" para quando um político precisa de dados atuais após um evento importante.
+
+**Granularidade dos dados de abstenção.** As taxas de abstenção do TSE estão disponíveis no nível de zona, mas nem sempre no nível de seção para eleições mais antigas. O algoritmo faz fallback graciosamente — se a abstenção em nível de seção não está disponível, usa médias do nível de zona. O score é menos preciso mas ainda útil.
+
+**Coligação vs. partido.** A política brasileira tem coligações fluidas. Um político pode concorrer pelo partido A mas numa coligação com partidos B, C e D. O cálculo de tendência precisa considerar o desempenho histórico da coligação completa, não só do partido — do contrário, os scores são enganosos em municípios onde o partido do político é fraco mas a coligação é forte.
+
+## O Que Vem a Seguir
+
+O algoritmo de scoring é bom o suficiente para ser útil. A próxima fase é tornar os insights mais acionáveis: não apenas "território X é prioridade 1", mas "no território X, 34% dos seus eleitores potenciais são mulheres de 35–55 anos que historicamente votam em candidatos focados em saúde e educação." Isso requer camadas demográficas sobre os dados eleitorais.
+
+O IBGE (bureau de estatísticas) do Brasil publica dados demográficos detalhados no nível de setor censitário, que mapeia aproximadamente para seções eleitorais. O join é imperfeito mas viável.
+
+Engenharia de dados eleitorais não é um problema resolvido. É por isso que é interessante.

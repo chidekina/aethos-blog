@@ -1,0 +1,93 @@
+---
+title: "Five Design Systems in One Session: What I Learned"
+description: "I redesigned 5 different apps in a single session, each with a completely distinct visual identity. Here's the design thinking behind each one and what the process revealed about design tokens."
+date: 2026-03-30
+lang: en
+tags: [design, frontend, css, tailwind, indie-hacking]
+translationSlug: 2026-03-30-cinco-sistemas-design-uma-sessao
+draft: false
+---
+
+Last week I sat down to redesign five different Aethos products in one session. Each needed a completely different visual identity — same tech stack (Tailwind v4, shadcn/ui), completely different feel.
+
+The constraint was clarifying. When you're moving fast between five aesthetics, you can't over-think any single decision. You have to commit. Here's what I built and what I learned.
+
+## The Five Projects
+
+### Forge — Industrial Terminal
+
+**Concept:** A code generation tool with a forging metaphor. It should feel like you're casting something in metal.
+
+**Decisions:**
+- Background: `#0a0a0a` — true black, not dark gray
+- Font: Space Mono (UI) + Lora (prose). The contrast between monospace and serif creates tension that fits the industrial tone
+- Primary: `oklch(0.68 0.18 45)` — a burnt orange that reads as molten without being cartoonish
+- CSS effects: scanline overlay via repeating gradient, glow utility class for interactive elements
+- Typography: all caps, wide letter-spacing (`tracking-[0.2em]`), `clamp(3.5rem, 10vw, 10rem)` for the hero heading
+
+The scanlines were almost cut — they felt like a gimmick. I kept them at very low opacity (3%) and they read as texture, not decoration.
+
+### Menthos — Bauhaus Executive
+
+**Concept:** A proposal generation tool used by creative agencies and consultants. Should feel like a premium creative studio, not another SaaS dashboard.
+
+**Decisions:**
+- Background: `oklch(0.97 0.008 85)` — off-white with a warm yellow shift, not pure white
+- Font: Playfair Display (headings) + Source Serif 4 (body). Full serif stack, no sans-serif
+- Primary: `oklch(0.72 0.14 82)` — gold that works at both small and large sizes
+- Texture: CSS grain overlay using SVG noise filter
+- Social proof: "12.847 proposals created" counter — real data displayed in the hero
+
+The grain overlay was the highest-leverage change. At 15% opacity it makes the background feel like paper. Without it, the cream color just looks like a failed white.
+
+### Code & Dragons — Dark Fantasy
+
+**Concept:** A gamified coding learning platform. Should feel like an ancient manuscript discovered in a dungeon, but readable.
+
+**Decisions:**
+- Background: `#0f0d0b` — almost black with brown undertone, not cool-toned
+- Font: IM Fell English (headings — genuinely medieval, loaded from Google Fonts) + Courier Prime (code)
+- Primary: `oklch(0.72 0.16 75)` — gold that renders well on the dark background
+- Animations: `torch-flicker` keyframe for ambient light effect, `xp-float` for XP gain notifications
+- CSS: noise texture + vignette (`radial-gradient` darkening the edges)
+
+The vignette was the key decision here. Without it, the texture looks cheap. With it, the page feels like you're looking at something illuminated by torchlight.
+
+### LDB Academy — Institutional Luxury
+
+**Concept:** Legal education platform for Brazilian lawyers. Must signal authority, tradition, and quality.
+
+**Decisions:**
+- Background: `oklch(0.977 0.005 80)` — warm white, almost identical to Menthos but slightly less saturated
+- Font: Cormorant Garamond (headings — condensed, elegant, distinctly legal) + Karla (body — clean sans for readability)
+- Primary: `oklch(0.68 0.14 78)` — gold, slightly darker than Menthos for more gravitas
+- Typography: italic headings, brand name in italic serif only — no decorative elements
+- Philosophy: zero animations, zero gimmicks. Authority is communicated through restraint
+
+This was the hardest to get right because "less is more" is harder to execute than "more is more". Every time I wanted to add something, I asked: does this communicate authority or does it undercut it?
+
+### Aethos Pilot — Cartography & Territory
+
+**Concept:** Electoral territory analysis for municipal politicians. Data-heavy, field-use, must work on a phone in direct sunlight.
+
+**Decisions:**
+- Background: `oklch(0.09 0.01 155)` — very dark green-tinted background, evokes satellite maps
+- Font: Instrument Serif (headings) + DM Mono (data/numbers)
+- Primary: `oklch(0.65 0.18 145)` — map-pin green
+- CSS: map grid background using `repeating-linear-gradient` at low opacity
+- Animation: `location-dot` ping effect on the CTA — a pulsing circle like a GPS location marker
+- Contrast: designed for outdoor use. All text exceeds WCAG AA, most exceeds AAA
+
+The grid background was almost invisible on desktop but worked well on mobile where the viewport is smaller and the grid density felt right.
+
+## What the Process Revealed
+
+**Design tokens are load-bearing.** Moving between five aesthetics in one session made it obvious that the variables aren't just convenience — they're the design. The entire feel of each product comes from about 8 values: background, foreground, primary, radius, two font names, and two or three CSS custom effects.
+
+**The best design decisions are constraints.** "No sans-serif on LDB Academy" and "no animations on LDB Academy" are constraints, not choices. Constraints force every remaining element to work harder.
+
+**oklch is worth learning.** All five primaries are oklch colors. The reason: oklch's chroma and lightness values are perceptually uniform, so you can swap hues while keeping the same visual weight. The gold on Menthos and the gold on Code & Dragons look equally prominent even though they're different hues, because I kept chroma and lightness constant. With hex, you'd have to eyeball it.
+
+**Texture beats color for differentiation.** Menthos and LDB Academy have nearly identical backgrounds. What makes them feel different is the grain overlay on Menthos and the absence of it on LDB Academy. Texture is a dimension of differentiation that most design systems ignore.
+
+The session took about 4 hours for all five. Two weeks later, looking at them side by side, they're still the right calls.

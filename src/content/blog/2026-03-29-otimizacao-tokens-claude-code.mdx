@@ -1,0 +1,86 @@
+---
+title: "Reduzindo o Uso de Tokens do Claude Code em 40%: O Que Realmente Funciona"
+description: "Não é sobre roteamento de modelos — esse é outro lever. É sobre a camada de config: CLAUDE.md enxuto, settings limpo e escopo de permissões. Quatro mudanças concretas que reduziram meus custos de sessão sem sacrificar qualidade."
+date: 2026-03-29
+lang: pt
+tags: [claude-code, devtools, cost, productivity, ai]
+translationSlug: 2026-03-29-claude-code-token-optimization
+draft: false
+---
+
+Já escrevi sobre [roteamento de modelos em 4 camadas](/blog/2026-02-23-roteamento-modelos-custo) — usando Ollama, Haiku, Sonnet e Opus para diferentes tipos de tarefa. Esse é um lever de custo. Este post é sobre outro: a camada de configuração.
+
+Quanto do orçamento de tokens é consumido antes do Claude escrever uma única linha de código é determinado em grande parte por quatro coisas. Aqui está o que mudei e qual foi o impacto.
+
+## 1. CLAUDE.md Enxuto
+
+O CLAUDE.md é carregado no contexto de toda sessão. Cada linha que você escreve lá custa tokens em cada chamada.
+
+Meu CLAUDE.md global foi de 231 para 83 linhas. Cortei removendo três categorias de conteúdo:
+
+**Explicações.** "Sempre use Zod para validação de entrada porque..." — o Claude não precisa da justificativa, precisa da regra. Cortei tudo que parece documentação e mantive apenas instruções.
+
+**Coisas que o Claude já sabe.** "Use TypeScript strict mode" ou "prefira const sobre let" — esses são defaults. Declarar isso desperdiça espaço e adiciona ruído.
+
+**Contexto redundante.** Tinha descrições de estrutura de projeto que estavam desatualizadas e o Claude consegue derivar lendo o código. Removidas.
+
+A regra: se você pode responder "o Claude se comportaria diferente sem esta linha?", e a resposta é não, delete.
+
+## 2. settings.local.json Limpo
+
+Toda vez que você aprova uma chamada de ferramenta com "always allow", isso é gravado em `settings.local.json`. Ao longo de meses de sessões isso acumula:
+
+- Permissões para projetos que você não usa mais
+- Caminhos específicos demais que agora estão desatualizados
+- Entradas duplicadas com escopos diferentes
+
+Fiz auditoria no meu e encontrei 40+ entradas, a maioria obsoleta. Após limpeza: 11 entradas, todas ativas e relevantes.
+
+Permissões obsoletas não apenas desperdiçam tokens — elas criam confusão. Quando o Claude vê `always allow bash in /home/user/old-project/`, ele precisa processar esse contexto mesmo que você esteja trabalhando em outro lugar.
+
+A auditoria leva 10 minutos. Faça uma vez por trimestre.
+
+## 3. Roteamento de Modelos em Subagentes (Não Só no Contexto Principal)
+
+A maioria das discussões sobre roteamento de modelos foca na janela de contexto principal. Mas o Claude Code cria subagentes para tarefas de busca e exploração. Se esses subagentes usam Sonnet por padrão, você está pagando preços de Sonnet para operações de `grep` e `find`.
+
+Meu roteamento:
+- **Haiku** → busca de arquivos, matching de padrões, operações glob, busca de conteúdo
+- **Sonnet** → análise, planejamento, revisão de código, decisões de arquitetura
+- **Opus** → implementação complexa no contexto principal apenas
+
+O insight-chave: o Haiku é rápido o suficiente para tarefas de busca e custa ~20x menos que o Opus. Uma sessão que aciona 15 subagentes de busca vai de cara a negligível.
+
+## 4. Permissões Amplas, Bloqueios Estreitos
+
+A contraintuitiva. Inicialmente tinha permissões conservadoras — o Claude perguntava antes de quase cada chamada de ferramenta. Parecia mais seguro.
+
+Também é caro. Cada prompt de permissão é uma interrupção. Cada interrupção significa que o Claude precisa reestabelecer contexto ao retomar. Uma sessão com 20 prompts de permissão tem 20 recarregamentos de contexto. Isso acumula.
+
+Minha abordagem atual: permitir livremente para todas as operações de leitura e writes locais. Só bloqueio:
+- Force push para main/master
+- Drop table / truncate
+- `rm -rf` em caminhos não temporários
+- Push para remote
+
+Todo o resto executa sem prompt. A sessão flui mais rápido, o contexto permanece coerente, e nunca tive uma operação genuinamente prejudicial passar porque as operações bloqueáveis são exatamente as três que importam.
+
+## O Que Não Ajuda
+
+Para completar — coisas que tentei e não moveram o ponteiro:
+
+**System prompts mais curtos.** Achei que comprimir os arquivos CLAUDE.md específicos de projeto ajudaria. A economia foi mínima porque são carregados uma vez e o Claude tem uma janela de contexto efetiva grande. O CLAUDE.md global tem mais alavancagem.
+
+**Evitar chamadas de ferramenta.** Alguns conselhos sugerem minimizar chamadas MCP. Mas chamadas de ferramenta são como o Claude obtém informações precisas — substituí-las por suposições aumenta erros e leva a ciclos de correção mais longos que custam mais no total.
+
+**Arquivos menores.** Tentei dividir arquivos grandes antes de mostrá-los ao Claude. Isso na verdade aumentou tokens por causa do overhead de múltiplas operações de leitura.
+
+## Os Números Reais
+
+Antes: ~180k tokens por sessão média
+Depois: ~105k tokens por sessão média
+Redução: ~42%
+
+Os grandes ganhos foram compressão do CLAUDE.md (~35% da redução) e roteamento de modelos em subagentes (~45%). Permissões e limpeza de settings contribuíram com os ~20% restantes.
+
+Seus números vão variar. Mas os levers são os mesmos.

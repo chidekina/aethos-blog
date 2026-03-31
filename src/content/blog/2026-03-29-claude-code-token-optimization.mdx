@@ -1,0 +1,86 @@
+---
+title: "Cutting Claude Code Token Usage by 40%: What Actually Works"
+description: "Not model routing — that's a separate lever. This is about the config layer: lean CLAUDE.md, clean settings, and permission scope. Four concrete changes that reduced my session costs without sacrificing quality."
+date: 2026-03-29
+lang: en
+tags: [claude-code, devtools, cost, productivity, ai]
+translationSlug: 2026-03-29-otimizacao-tokens-claude-code
+draft: false
+---
+
+I've written before about [4-tier model routing](/blog/2026-02-23-model-routing-cost-data) — using Ollama, Haiku, Sonnet, and Opus for different task types. That's one cost lever. This post is about a different one: the config layer.
+
+How much token budget gets consumed before Claude writes a single line of code is largely determined by four things. Here's what I changed and what the impact was.
+
+## 1. Lean CLAUDE.md
+
+CLAUDE.md is loaded into every session's context. Every line you write there costs tokens on every call.
+
+My global CLAUDE.md went from 231 lines to 83 lines. I cut it by removing three categories of content:
+
+**Explanations.** "Always use Zod for input validation because..." — Claude doesn't need the rationale, it needs the rule. Cut everything that reads like documentation and keep only instructions.
+
+**Things Claude already knows.** "Use TypeScript strict mode" or "prefer const over let" — these are defaults. Stating them wastes space and adds noise.
+
+**Redundant context.** I had descriptions of project structure that were outdated and Claude could derive by reading the code. Removed.
+
+The rule: if you could answer "would Claude behave differently without this line?", and the answer is no, delete it.
+
+## 2. Clean settings.local.json
+
+Every time you approve a tool call with "always allow", it writes to `settings.local.json`. Over months of sessions this accumulates:
+
+- Permissions for projects you no longer work on
+- Overly specific paths that are now stale
+- Duplicate entries with different scopes
+
+I audited mine and found 40+ entries, most stale. After cleanup: 11 entries, all active and relevant.
+
+Stale permissions don't just waste tokens — they create confusion. When Claude sees `always allow bash in /home/user/old-project/`, it has to process that context even if you're working somewhere else.
+
+The audit takes 10 minutes. Do it once a quarter.
+
+## 3. Subagent Model Routing (Not Just Main Context)
+
+Most discussions of model routing focus on the main context window. But Claude Code spawns subagents for search and exploration tasks. If those subagents default to Sonnet, you're paying Sonnet prices for `grep` and `find` operations.
+
+My routing:
+- **Haiku** → file search, pattern matching, glob operations, content search
+- **Sonnet** → analysis, planning, code review, architecture decisions
+- **Opus** → complex implementation in main context only
+
+The key insight: Haiku is fast enough for search tasks and costs ~20x less than Opus. A session that triggers 15 search subagents goes from expensive to negligible.
+
+## 4. Wide Permissions, Narrow Blocks
+
+The counterintuitive one. I initially had conservative permissions — Claude would ask before almost every tool call. This felt safer.
+
+It's also expensive. Every permission prompt is an interruption. Every interruption means Claude has to re-establish context when it resumes. A session with 20 permission prompts has 20 context re-loads. That adds up.
+
+My current approach: allow freely for all read operations and local writes. Only gate on:
+- Force push to main/master
+- Drop table / truncate
+- `rm -rf` on non-temp paths
+- Pushing to remote
+
+Everything else runs without a prompt. The session flows faster, context stays coherent, and I've never had a genuinely harmful operation slip through because the gateable operations are exactly the three that matter.
+
+## What Doesn't Help
+
+For completeness — things I tried that didn't move the needle:
+
+**Shorter system prompts.** I thought compressing my project-level CLAUDE.md files would help. The savings were minimal because they're loaded once and Claude has a large effective context window. The global CLAUDE.md has more leverage.
+
+**Avoiding tool calls.** Some advice suggests minimizing MCP tool calls. But tool calls are how Claude gets accurate information — replacing them with guesses increases errors and leads to longer correction cycles that cost more overall.
+
+**Smaller files.** I tried splitting large files before showing them to Claude. This actually increased tokens because of the overhead of multiple read operations.
+
+## The Actual Numbers
+
+Before: ~180k tokens per average session
+After: ~105k tokens per average session
+Reduction: ~42%
+
+The big wins were CLAUDE.md compression (~35% of the reduction) and subagent model routing (~45%). Permissions and settings cleanup contributed the remaining ~20%.
+
+Your numbers will vary. But the levers are the same.
