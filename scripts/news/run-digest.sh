@@ -22,7 +22,11 @@ LOG="${NEWS_DIGEST_LOG:-$REPO/scripts/news/digest.log}"
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
 
-PATH="/usr/local/bin:/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+# NEWS_PATH_PREPEND exists so the suite can isolate this lookup. Without it a
+# machine that happens to carry node in /usr/local/bin — a GitHub runner does —
+# satisfies `command -v node` and the nvm branch below is never exercised, so
+# its arms pass without testing anything. Production never sets it.
+PATH="${NEWS_PATH_PREPEND:-/usr/local/bin:/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.bun/bin:$HOME/.local/bin}:$PATH"
 export PATH
 
 # Measured 2026-09-02 by running this script under a real cron environment

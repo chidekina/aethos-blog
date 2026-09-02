@@ -21,18 +21,27 @@ has() { grep -qF -- "$2" <<<"$1"; }
 run() {
   local home="$1"; shift
   local log="$T/log.$RANDOM"
-  env -i HOME="$home" PATH=/usr/bin:/bin SHELL=/bin/sh NEWS_DIGEST_LOG="$log" "$@" \
+  # NEWS_PATH_PREPEND points at nothing so the node lookup CANNOT be satisfied by
+  # whatever this machine happens to have installed. Measured 2026-09-02: on a
+  # GitHub runner node sits in /usr/local/bin, which silently satisfied the
+  # lookup and made three arms pass without exercising the nvm branch at all —
+  # green locally, red on CI, and the local green was the wrong one.
+  env -i HOME="$home" PATH=/usr/bin:/bin SHELL=/bin/sh \
+      NEWS_PATH_PREPEND="$T/no-such-dir" NEWS_DIGEST_LOG="$log" "$@" \
       /bin/sh -c "$SCRIPT" >/dev/null 2>&1
   local st=$?
   printf '%s\n' "$st"
   cat "$log" 2>/dev/null
 }
 
-echo "ARM 1 — precondition: cron's PATH really does not reach node"
-NODE_ON_CRON_PATH="$(env -i PATH=/usr/bin:/bin /bin/sh -c 'command -v node' 2>/dev/null)"
-[ -z "$NODE_ON_CRON_PATH" ] \
-  && ok "node absent from /usr/bin:/bin (the trap this script exists for)" \
-  || ok "node present at $NODE_ON_CRON_PATH — arms 2-3 still valid, trap simply does not apply here"
+echo "ARM 1 — precondition: the arms below can actually reach the nvm branch"
+# This is the assertion that would have caught the CI failure locally. If any
+# node is reachable, the arms testing nvm resolution prove nothing.
+NODE_REACHABLE="$(env -i PATH=/usr/bin:/bin NEWS_PATH_PREPEND="$T/no-such-dir" \
+    /bin/sh -c 'PATH="$NEWS_PATH_PREPEND:$PATH"; command -v node' 2>/dev/null)"
+[ -z "$NODE_REACHABLE" ] \
+  && ok "no node reachable under the isolated PATH — the nvm arms are meaningful" \
+  || bad "isolated PATH still reaches node at $NODE_REACHABLE" "arms 2-4 would pass without testing the nvm branch"
 
 echo "ARM 2 — no node anywhere is FATAL with a log line, never a silent 127"
 mkdir -p "$T/emptyhome"
