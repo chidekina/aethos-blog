@@ -89,8 +89,17 @@ becomes unreachable while the build stays green.
 
 - **OG images** are generated per post by `src/pages/og/[slug].png.ts` using
   Satori (HTML→SVG) and `@resvg/resvg-js` (SVG→PNG). Satori cannot read system
-  fonts — the `.ttf` files in `public/fonts/` are loaded from disk at build
-  time. Deleting them breaks every OG image with no template error.
+  fonts, so the route loads a `.woff` straight out of
+  `node_modules/@fontsource/inter/files/` at build time — **not** from
+  `public/fonts/`, whose `.ttf` files are unreferenced leftovers (measured:
+  zero matches for `fonts/` under `src/`, with a positive control proving the
+  search was not blind).
+  🔴 That font must be read with `readExact()`, never `readFileSync(p).buffer`.
+  A Node Buffer can be a view into a shared allocation pool, so `.buffer` hands
+  back the whole pool and Satori parses whatever sits at offset 0. It broke the
+  Vercel build with `Unsupported OpenType signature 'use` while the same commit
+  built clean locally, because the failure depends on allocation order and
+  therefore moves with unrelated changes.
 - **Syntax highlighting** is Shiki, configured through Astro's markdown
   pipeline; no client-side highlighter ships.
 - **Theme** is a `light` class on `<html>` plus CSS custom properties, restored

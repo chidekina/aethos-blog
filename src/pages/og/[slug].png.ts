@@ -10,16 +10,32 @@ export async function getStaticPaths() {
   return posts.map((post) => ({ params: { slug: post.slug }, props: { post } }));
 }
 
+/**
+ * Read a file as an ArrayBuffer holding EXACTLY that file's bytes.
+ *
+ * `fs.readFileSync(p).buffer` is not that. A Node Buffer can be a view into a
+ * shared allocation pool, and `.buffer` hands back the whole pool — so Satori
+ * received whatever happened to sit at offset 0, which is why the Vercel build
+ * failed with `Unsupported OpenType signature 'use` (the tail of some earlier
+ * read, not the font). It passed locally because the pool happened to start
+ * with the font bytes; the failure depends on allocation order, so it moves
+ * with unrelated changes and reads as "the font is broken" when it is not.
+ */
+function readExact(filePath: string): ArrayBuffer {
+  const buf = fs.readFileSync(filePath);
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+}
+
 async function loadFont(): Promise<ArrayBuffer> {
   // satori supports TTF/OTF/WOFF (not woff2)
   const woffPath = path.join(process.cwd(), 'node_modules/@fontsource/inter/files/inter-latin-700-normal.woff');
   if (fs.existsSync(woffPath)) {
-    return fs.readFileSync(woffPath).buffer as ArrayBuffer;
+    return readExact(woffPath);
   }
   // Fallback: try 400 weight
   const woff400 = path.join(process.cwd(), 'node_modules/@fontsource/inter/files/inter-latin-400-normal.woff');
   if (fs.existsSync(woff400)) {
-    return fs.readFileSync(woff400).buffer as ArrayBuffer;
+    return readExact(woff400);
   }
   throw new Error('Inter font not found. Run: bun add @fontsource/inter');
 }
