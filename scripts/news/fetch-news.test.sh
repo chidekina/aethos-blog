@@ -130,6 +130,27 @@ DRAFTS="$(grep -l 'draft: true' "$T/posts8"/*.mdx 2>/dev/null | wc -l)"
 [ "$DRAFTS" = 2 ] && ok "both files are drafts" || bad "both files are drafts" "got $DRAFTS with draft: true"
 [ -s "$T/seen8.json" ] && ok "seen.json updated after a real write" || bad "seen.json updated" "empty/missing"
 
+echo "ARM 9 — a feed with no dates is named and capped, not silently immortal"
+cat > "$T/feeds/nodate.xml" <<XML
+<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>LLM agent testing one</title><link>https://example.test/n1</link><description>agent testing tdd</description></item>
+<item><title>LLM agent testing two</title><link>https://example.test/n2</link><description>agent testing tdd</description></item>
+<item><title>LLM agent testing three</title><link>https://example.test/n3</link><description>agent testing tdd</description></item>
+</channel></rss>
+XML
+cfg "$T/c9.json" "[{\"name\":\"NoDate\",\"url\":\"http://127.0.0.1:$PORT/nodate.xml\",\"tag\":\"ai\",\"weight\":3}]"
+python3 - "$T/c9.json" <<'PYEOF'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['maxUndated']=2; json.dump(d,open(p,'w'))
+PYEOF
+OUT9="$(run "$T/c9.json" "$T/seen9.json" "$T/posts9" --dry-run)"
+has "$OUT9" "NO DATES" && ok "dateless feed is named in the output" || bad "dateless feed named" "$OUT9"
+N9="$(grep -c 'example.test/n' <<<"$OUT9")"
+[ "$N9" = 2 ] && ok "undated items capped at maxUndated (2 of 3)" || bad "undated cap" "got $N9 of 3"
+# negative control: capped must not mean banned — without it a generator that
+# dropped every undated item would pass the assertion above just as well.
+[ "$N9" -gt 0 ] && ok "control: undated items are still included, not dropped" || bad "control: undated still included" "cap became a ban"
+
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

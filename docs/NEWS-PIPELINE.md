@@ -73,6 +73,15 @@ Everything lives in `scripts/news/sources.json`:
 - `maxItems` — cap per digest (default 8). No single feed contributes more than 3.
 - `maxAgeDays` — window. Items with no parseable date are **kept**, not dropped,
   so a feed with broken timestamps does not silently vanish.
+- `maxUndated` — how many dateless items may reach one digest (default 2).
+
+🔴 **A dateless item cannot age out, so "kept" once meant "immortal".** Measured
+2026-09-02: the Google Developers Blog feed is RSS 2.0 with **no date element at
+all** on its items, and a post from August 4th reached the first digest as this
+week's news. The generator now names every such feed on stdout (`NO DATES  <feed>`)
+and caps them. When you see that line, treat those items' recency as unknown and
+check the page before publishing — the cap limits the damage, it does not date
+anything.
 
 After editing, always:
 
@@ -97,15 +106,27 @@ from the excerpt without checking it. Review is not a formality:
    overstates, hedges wrongly, or invents a number.
 3. Check the PT file is actually Portuguese throughout — the translation step is
    a second model call and can echo the English sentence back.
-4. Fix the title/description if the week has an obvious theme.
-5. Set `draft: false` in both files.
-6. `bun run build` — the schema is the gate.
-7. Land both languages in the same commit.
+   Also translate the **headings**: the generator reuses the source's English
+   title verbatim in both files.
+4. For any item under a `NO DATES` feed, open the page and find its real
+   publication date. That is the check that would have caught the month-old item
+   in the first digest.
+5. Fix the title/description if the week has an obvious theme.
+6. Set `draft: false` in both files.
+7. `bun run build` — the schema is the gate.
+8. Land both languages in the same commit.
 
-`CONTRACT.md` invariant 2 keeps the *generated* files at `draft: true`; that
-rule is about the pipeline's output, and flipping the flag by hand as part of
-review is the intended path — update the contract's glob if you rename the
-series.
+What review actually costs, measured on the first digest: eight machine-written
+summaries, **five rewritten and one removed entirely**. None of the errors were
+invented facts — the numbers the model quoted all checked out. They were
+confident vagueness ("provides valuable insight into how language models learn"
+for a post about diffing published prompts) and omitted the one detail a
+developer needed (that the new Copilot model requires data retention). Budget
+real time for this step; skimming it produces plausible text that says nothing.
+
+Invariant 2 is enforced by `fetch-news.test.sh` ARM 8, **not** by `CONTRACT.md` —
+see the note in the contract for why two grep-shaped versions of that rule were
+worthless.
 
 ## State
 
