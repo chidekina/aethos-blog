@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-02T21:11:42.667Z",
+  "context": "default",
+  "phase": null,
+  "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
+  "status": "paused",
+  "work_in_flight": false,
+  "head": "a21a7fd5ce0ef7ad4faac20c9834b1338cfef722",
+  "head_matches_remote": true,
+  "working_tree_clean": true,
+  "completed_this_session": [
+    {"name": "Docs + CONTRACT.md with executable validation", "pr": 3, "commit": "d44b785"},
+    {"name": "Reader recommendations page fed by a GitHub issue form", "pr": 3, "commit": "d44b785"},
+    {"name": "Weekly AI/dev news digest generator (drafts only)", "pr": 3, "commit": "d44b785"},
+    {"name": "OG font read fixed — Buffer pool defect caught by Vercel preview", "pr": 3, "commit": "d44b785"},
+    {"name": "First Radar digest reviewed against sources and published", "pr": 4, "commit": "e8d6510"},
+    {"name": "Dateless-feed cap; vacuous CONTRACT rule removed", "pr": 4, "commit": "e8d6510"},
+    {"name": "Cron installed; nvm node resolution; false-success closed", "pr": 5, "commit": "3404906"},
+    {"name": "CI gate on PRs", "pr": 5, "commit": "3404906"},
+    {"name": "Branch protection, swarmvault scaffold ignored, TS2345 fixed, astro check gate", "pr": 6, "commit": "a21a7fd"}
+  ],
+  "remaining_tasks": [],
+  "blockers": [],
+  "human_actions_pending": [
+    {"action": "Review the first cron-produced digest on Monday 08:00 before publishing", "context": "The generator writes draft:true; publishing is a human act after checking each line against its source. First edition needed 5 of 8 summaries rewritten and 1 removed.", "blocking": false},
+    {"action": "Decide whether enforce_admins on main should stay true", "context": "It blocks direct pushes for the repo owner too, which voids the docs-only carve-out in this repo. Applied because the Ship-Safe rule asks for it; reversible with one gh api call.", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Reader submissions arrive as GitHub issues, not a form endpoint", "rationale": "The site is static. Trade: submitting needs a GitHub account; in exchange there is no spam surface, no moderation queue, no runtime cost, and every entry carries a real identity to credit."},
+    {"decision": "The news digest never publishes; it writes draft:true only", "rationale": "llama3.2:3b produces confident vagueness rather than invented facts. Review is where the value is added — measured at 5 rewrites and 1 removal out of 8 on the first run."},
+    {"decision": "Invariant 2 is enforced by a test, not by CONTRACT.md", "rationale": "Two grep-shaped versions were worthless: one made publishing a violation, the other read green against a mutated generator because the frontmatter lives in a template literal the validator blanks."},
+    {"decision": "Typecheck with astro check, typescript pinned to ^6", "rationale": "tsc does not parse .astro and this src/ is 6 .astro to 3 .ts; TS 7.x is the native compiler and does not expose the API astro check needs."},
+    {"decision": "swarmvault.* gitignored, not deleted", "rationale": "Generic scaffolding from a global CLI, byte-identical to ~/projetos, referenced by nothing here. Removing another tool's state is its owner's call."}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Nothing is in flight. If picking work up: STATE.md 'Next candidates' lists client-side search over posts, and watching Monday's first cron digest.",
+  "context_notes": "Every feature shipped through a PR with the pre-merge gate run on the branch HEAD. main is protected and the gate check is required, including for admins, so any further work needs a branch and a PR — a direct push to main is refused."
+}
