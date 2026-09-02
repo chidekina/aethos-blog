@@ -23,6 +23,23 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The build does NOT typecheck — Astro strips types. A type error can sit
+      # in the tree indefinitely while every other step stays green, which is
+      # exactly what happened: TS2345 in the OG route survived from the initial
+      # commit until 2026-09-02. Fixing it without a gate only lets the next one
+      # accumulate the same way.
+      #
+      # `astro check`, not bare `tsc`: tsc does not parse .astro files, and this
+      # src/ is 6 .astro to 3 .ts. Measured — a forged type error in a .astro
+      # file left `tsc --noEmit` reporting zero, which is the shape of a gate
+      # that guards almost nothing while looking thorough.
+      #
+      # TypeScript is pinned to 6.x on purpose: 7.x is the native compiler and
+      # does not expose the programmatic API astro check needs. Bumping it to 7
+      # breaks this step until upstream lands support.
+      - name: Typecheck (astro check — covers .astro and .ts)
+        run: bun run check
+
       # The content schemas in src/content/config.ts are the only validation
       # layer for posts and recommendations, so a passing build IS the check
       # that every content file is well-formed.

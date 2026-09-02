@@ -10,7 +10,7 @@
 | Blog | 42 published posts (21 EN + 21 PT-BR), including the first Radar digest |
 | Stack | Astro 5, Tailwind v4, MDX, Shiki, Satori OG images, RSS + sitemap |
 | Deploy | Vercel, static build from `main` on push — **merging is deploying** |
-| CI | `.github/workflows/ci.yml` on every PR: build + 3 suites + static/draft output assertions. Vercel preview is a second independent check |
+| CI | `.github/workflows/ci.yml` on every PR: `astro check` + build + 3 suites + static/draft output assertions. **Required** by branch protection on `main` |
 | Recommendations | `/recommendations`, reader submissions via GitHub issue form, 6 seed entries |
 | News digest | `scripts/news/` — weekly, 9 feeds, local Ollama summaries. **Cron installed** (Mon 08:00) |
 | Tests | news 22 · cron wrapper 12 · recommendations 19, all mutation-verified |
@@ -18,15 +18,18 @@
 
 ## Open
 
-- **Branch protection is not enabled.** The CI workflow exists and runs, but
-  nothing yet *requires* it to pass before merge. Making it required is a repo
-  setting, not a file: Settings → Branches → require the `gate` check. Until
-  then CI reports, it does not block.
-- `swarmvault.config.json` and `swarmvault.schema.md` sit untracked in the repo
-  root. They were not created by this work; decide whether they belong here.
-- `src/pages/og/[slug].png.ts:136` has a TS2345 (Buffer vs BodyInit) dating to
-  the initial commit. Not blocking — the build does not typecheck — but the
-  pre-commit hook reports it on every commit.
+Nothing outstanding. The three items listed here on 2026-09-02 are closed:
+
+- **Branch protection** — enabled. `gate` is required, `strict` is on,
+  force-push and deletion refused, and it applies to admins. Consequence worth
+  knowing: direct pushes to `main` are now rejected for everyone, so the
+  docs-only carve-out (prose may skip a PR) no longer applies in this repo.
+- **`swarmvault.*` and its five empty directories** — generic scaffolding from a
+  global CLI, byte-identical to the one in `~/projetos`, referenced by nothing
+  here. Gitignored rather than deleted; they belong to that tool.
+- **TS2345 in the OG route** — fixed, and the reason it survived from the
+  initial commit is now gated: the build does not typecheck, so `astro check`
+  runs in CI.
 
 ## Known limits, stated rather than left implicit
 
@@ -44,6 +47,5 @@
 
 ## Next candidates
 
-1. Require the CI check in branch protection (turns a report into a gate).
-2. Client-side search across posts — the corpus is small enough to need no index.
-3. Decide the fate of the two untracked `swarmvault.*` files.
+1. Client-side search across posts — the corpus is small enough to need no index.
+2. Watch the first real cron digest (Monday 08:00) and review it before publishing.
