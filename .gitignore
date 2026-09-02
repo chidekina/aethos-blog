@@ -8,3 +8,6 @@ node_modules/
 .vscode/
 .DS_Store
 .vercel
+
+# news digest cron log (machine-local, not repo state)
+scripts/news/digest.log
