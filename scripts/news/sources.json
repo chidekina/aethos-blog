@@ -1,0 +1,26 @@
+{
+  "_comment": "Feeds polled by fetch-news.mjs. `weight` biases the relevance score; `tag` lands on the generated post. Verify a new feed with: node scripts/news/fetch-news.mjs --check-sources",
+  "maxAgeDays": 8,
+  "maxItems": 8,
+  "minScore": 2,
+  "sources": [
+    { "name": "Simon Willison",        "url": "https://simonwillison.net/atom/everything/",            "tag": "ai",      "weight": 3 },
+    { "name": "Hacker News (front)",   "url": "https://hnrss.org/frontpage?points=250",                 "tag": "dev",     "weight": 1 },
+    { "name": "Pragmatic Engineer",    "url": "https://blog.pragmaticengineer.com/rss/",                 "tag": "dev",     "weight": 2 },
+    { "name": "OpenAI News",           "url": "https://openai.com/news/rss.xml",                        "tag": "ai",      "weight": 2 },
+    { "name": "GitHub Changelog",      "url": "https://github.blog/changelog/feed/",                    "tag": "tooling", "weight": 2 },
+    { "name": "Google Dev Blog",       "url": "https://developers.googleblog.com/feeds/posts/default",  "tag": "ai",      "weight": 1 },
+    { "name": "Martin Fowler",         "url": "https://martinfowler.com/feed.atom",                     "tag": "testing", "weight": 3 },
+    { "name": "InfoQ",                 "url": "https://feed.infoq.com/",                                "tag": "dev",     "weight": 1 },
+    { "name": "The Verge AI",          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "tag": "ai", "weight": 1 }
+  ],
+  "keywords": {
+    "ai": 3, "llm": 3, "agent": 2, "claude": 3, "gpt": 2, "gemini": 2, "copilot": 2,
+    "prompt": 2, "rag": 2, "embedding": 2, "inference": 2, "model": 1, "openai": 2, "anthropic": 3,
+    "test": 3, "testing": 3, "tdd": 3, "e2e": 2, "playwright": 2, "vitest": 2, "coverage": 2,
+    "typescript": 2, "javascript": 1, "react": 1, "astro": 2, "node": 1, "bun": 2,
+    "postgres": 2, "sqlite": 2, "docker": 2, "ci": 1, "devtools": 2, "developer": 2,
+    "security": 2, "benchmark": 2, "eval": 3, "mcp": 3, "open source": 1
+  },
+  "blocklist": ["stock", "lawsuit", "funding round", "valuation", "layoff", "ipo", "crypto", "nft"]
+}
