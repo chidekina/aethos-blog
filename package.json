@@ -16,6 +16,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.2.0",
     "astro": "^5.17.1",
+    "fast-xml-parser": "^5.11.1",
     "reading-time": "^1.5.0",
     "satori": "^0.19.2",
     "shiki": "^3.22.0",

@@ -1,0 +1,11 @@
+{
+  "title": "Simon Willison's Weblog",
+  "url": "https://simonwillison.net/",
+  "category": "site",
+  "description": "Daily notes on LLMs, prompt injection, and small tools. The best running log of what actually changed in AI tooling this week.",
+  "author": "Simon Willison",
+  "lang": "en",
+  "tags": ["ai", "llm", "security"],
+  "recommendedBy": "chidekina",
+  "addedAt": "2026-09-02"
+}

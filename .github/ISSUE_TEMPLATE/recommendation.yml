@@ -1,0 +1,78 @@
+name: 📌 Recommend something
+description: Suggest a podcast, video, article, site, newsletter, course, book or tool for the Recommendations page.
+title: "[rec] "
+labels: ["recommendation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for recommending. Approved entries land on
+        [blog.aethostech.com.br/recommendations](https://blog.aethostech.com.br/recommendations)
+        credited to your GitHub handle.
+
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: Name of the podcast, channel, article, tool…
+      placeholder: Latent Space
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL
+      placeholder: https://www.latent.space/
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - youtube
+        - spotify
+        - article
+        - site
+        - newsletter
+        - course
+        - book
+        - tool
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Why is it worth someone's time?
+      description: One or two sentences, max 280 characters. English or Portuguese.
+      placeholder: Newsletter on the AI engineer stack — evals, agents, inference.
+    validations:
+      required: true
+
+  - type: input
+    id: author
+    attributes:
+      label: Author / creator
+      description: Optional.
+      placeholder: swyx & Alessio
+
+  - type: dropdown
+    id: lang
+    attributes:
+      label: Language of the content
+      options:
+        - en
+        - pt
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: tags
+    attributes:
+      label: Tags
+      description: Optional. Comma-separated, lowercase.
+      placeholder: ai, engineering, podcast

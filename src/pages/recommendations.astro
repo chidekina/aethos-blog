@@ -1,0 +1,178 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const REPO = 'chidekina/aethos-blog';
+const SUBMIT_URL = `https://github.com/${REPO}/issues/new?template=recommendation.yml&labels=recommendation`;
+
+// Order here is the tab order. A category in the schema but missing from this
+// list renders no tab, so the entry is unreachable — keep the two in sync.
+const CATEGORIES = [
+  { id: 'youtube',    label: 'YouTube',    icon: '▶' },
+  { id: 'spotify',    label: 'Spotify',    icon: '♪' },
+  { id: 'article',    label: 'Articles',   icon: '¶', labelPt: 'Artigos' },
+  { id: 'site',       label: 'Sites',      icon: '⌂' },
+  { id: 'newsletter', label: 'Newsletters',icon: '✉' },
+  { id: 'course',     label: 'Courses',    icon: '◈', labelPt: 'Cursos' },
+  { id: 'book',       label: 'Books',      icon: '▤', labelPt: 'Livros' },
+  { id: 'tool',       label: 'Tools',      icon: '⚙', labelPt: 'Ferramentas' },
+] as const;
+
+const all = await getCollection('recommendations');
+const recs = all.sort((a, b) => b.data.addedAt.getTime() - a.data.addedAt.getTime());
+const counts = Object.fromEntries(
+  CATEGORIES.map((c) => [c.id, recs.filter((r) => r.data.category === c.id).length])
+);
+const used = CATEGORIES.filter((c) => counts[c.id] > 0);
+
+function hostOf(url: string) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+---
+
+<BaseLayout
+  title="Recommendations"
+  description="Podcasts, articles, videos and tools recommended by readers of the Aethos Tech blog."
+>
+  <div style="margin-bottom: 2.5rem; padding-bottom: 2rem; border-bottom: 1px solid var(--color-border);">
+    <h1 style="font-size: 1.75rem; font-weight: 800; color: var(--color-text); margin-bottom: 0.6rem; letter-spacing: -0.02em; font-family: var(--font-display);"
+        data-i18n="rec.title">Recommendations</h1>
+    <p style="color: var(--color-text-muted); font-size: 1rem; max-width: 52ch; line-height: 1.6; margin-bottom: 1.25rem;"
+       data-i18n="rec.description">
+      Things readers found worth their time — podcasts, videos, articles, tools. Send yours.
+    </p>
+    <a
+      href={SUBMIT_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="rec-submit"
+    ><span data-i18n="rec.submit">Recommend something</span> ↗</a>
+  </div>
+
+  {recs.length === 0 ? (
+    <p style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;" data-i18n="rec.empty">
+      No recommendations yet. Be the first.
+    </p>
+  ) : (
+    <>
+      <div id="rec-filters" style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 2rem;" role="tablist" aria-label="Filter by category">
+        <button class="rec-cat-btn" data-cat="" data-active="true" aria-pressed="true">
+          <span data-i18n="rec.all">All</span> <span style="opacity:.5">{recs.length}</span>
+        </button>
+        {used.map((c) => (
+          <button class="rec-cat-btn" data-cat={c.id} data-active="false" aria-pressed="false" aria-label={`Filter by ${c.label}`}>
+            <span aria-hidden="true">{c.icon}</span> {c.label} <span style="opacity:.5">{counts[c.id]}</span>
+          </button>
+        ))}
+      </div>
+
+      <ul id="rec-list" style="list-style: none; padding: 0; margin: 0;">
+        {recs.map((r) => (
+          <li class="rec-item" data-cat={r.data.category} data-rec-lang={r.data.lang} style="padding: 1.25rem 0; border-bottom: 1px solid var(--color-border);">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem;">
+              <a href={r.data.url} target="_blank" rel="noopener noreferrer" class="post-link" style="flex: 1; min-width: 0;">
+                <h2 style="font-size: 1rem; font-weight: 700; margin: 0; line-height: 1.4; font-family: var(--font-display);">
+                  {r.data.title} <span style="opacity:.5; font-weight: 400;">↗</span>
+                </h2>
+              </a>
+              <span class="lang-badge">{r.data.lang.toUpperCase()}</span>
+            </div>
+
+            <p style="color: var(--color-text-muted); font-size: 0.875rem; margin: 0 0 0.6rem; line-height: 1.6;">
+              {r.data.description}
+            </p>
+
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; font-size: 0.75rem; color: var(--color-text-muted);">
+              <span class="rec-chip">{CATEGORIES.find((c) => c.id === r.data.category)?.icon} {r.data.category}</span>
+              <span style="opacity:.6;">{hostOf(r.data.url)}</span>
+              {r.data.author && (<><span aria-hidden="true" style="color: var(--color-border);">·</span><span>{r.data.author}</span></>)}
+              <span aria-hidden="true" style="color: var(--color-border);">·</span>
+              <span>
+                <span data-i18n="rec.by">via</span>{' '}
+                <a href={`https://github.com/${r.data.recommendedBy}`} target="_blank" rel="noopener noreferrer" class="nav-link">@{r.data.recommendedBy}</a>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <p id="rec-no-results" hidden style="color: var(--color-text-muted); text-align: center; padding: 3rem 0;" data-i18n="rec.no-results">
+        Nothing in this category yet.
+      </p>
+    </>
+  )}
+</BaseLayout>
+
+<style>
+  .rec-submit {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--color-text);
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 0.45rem 0.8rem;
+    transition: background 150ms ease-out, border-color 150ms ease-out;
+  }
+  .rec-submit:hover { border-color: var(--color-text-muted); }
+  .rec-cat-btn {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.28rem 0.55rem;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: background 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
+    min-height: 32px;
+  }
+  .rec-cat-btn[data-active='true'] {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+  }
+  .rec-chip {
+    font-family: var(--font-mono);
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.12rem 0.4rem;
+  }
+</style>
+
+<script>
+  const btns  = document.querySelectorAll<HTMLButtonElement>('.rec-cat-btn');
+  const items = document.querySelectorAll<HTMLElement>('.rec-item');
+  const empty = document.getElementById('rec-no-results');
+
+  let activeCat = new URLSearchParams(window.location.search).get('cat') || '';
+
+  function apply() {
+    let visible = 0;
+    items.forEach((el) => {
+      const show = !activeCat || el.dataset.cat === activeCat;
+      el.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    if (empty) empty.hidden = visible !== 0;
+    btns.forEach((b) => {
+      const on = (b.dataset.cat ?? '') === activeCat;
+      b.dataset.active = String(on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    const qs = activeCat ? `?cat=${activeCat}` : window.location.pathname;
+    history.replaceState(null, '', qs);
+  }
+
+  btns.forEach((b) => b.addEventListener('click', () => {
+    const cat = b.dataset.cat ?? '';
+    activeCat = activeCat === cat ? '' : cat;
+    apply();
+  }));
+
+  apply();
+</script>

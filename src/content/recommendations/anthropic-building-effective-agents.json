@@ -1,0 +1,11 @@
+{
+  "title": "Building Effective Agents",
+  "url": "https://www.anthropic.com/engineering/building-effective-agents",
+  "category": "article",
+  "description": "Anthropic's engineering write-up on when an agent loop beats a fixed workflow, with the patterns worth copying and the ones worth skipping.",
+  "author": "Anthropic",
+  "lang": "en",
+  "tags": ["agents", "llm", "architecture"],
+  "recommendedBy": "chidekina",
+  "addedAt": "2026-09-02"
+}
