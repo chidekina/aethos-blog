@@ -149,7 +149,15 @@ export async function GET({ props }: APIContext & { props: { post: Awaited<Retur
   const pngData = resvg.render();
   const pngBuffer = pngData.asPng();
 
-  return new Response(pngBuffer, {
+  // A Node Buffer is not assignable to BodyInit (and since TS 5.7 neither is a
+  // Uint8Array<ArrayBufferLike>), so hand Response a plain ArrayBuffer.
+  // The offset and length are passed deliberately: `pngBuffer.buffer` alone
+  // would hand over the shared allocation pool rather than this image — the
+  // same defect readExact() above exists to prevent, except here it would ship
+  // a corrupt PNG instead of failing loudly.
+  const png = pngBuffer.buffer.slice(pngBuffer.byteOffset, pngBuffer.byteOffset + pngBuffer.byteLength) as ArrayBuffer;
+
+  return new Response(png, {
     headers: { 'Content-Type': 'image/png' },
   });
 }

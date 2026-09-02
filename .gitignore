@@ -11,3 +11,17 @@ node_modules/
 
 # news digest cron log (machine-local, not repo state)
 scripts/news/digest.log
+
+# SwarmVault scaffolding. `swarmvault` (a global knowledge-vault CLI) drops a
+# generic config, a schema template and five empty directories into whatever
+# directory it is pointed at — it did so here on 2026-09-02, and the config is
+# byte-identical to the one in ~/projetos. Nothing in this blog reads any of
+# it. Ignored rather than deleted: the files belong to that tool, not to this
+# repo, and removing another tool's state is its owner's call.
+swarmvault.config.json
+swarmvault.schema.md
+/raw/
+/wiki/
+/state/
+/agent/
+/inbox/

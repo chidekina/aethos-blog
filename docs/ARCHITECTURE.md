@@ -119,8 +119,8 @@ bun preview
 
 Vercel builds from `main` on push, so **merging is deploying**. The gate is
 therefore on the pull request, not on the push: `.github/workflows/ci.yml` runs
-the build (which is the content-schema validation), all three test suites, and
-two output assertions — that the build produced no server functions, and that
+`astro check`, the build (which is the content-schema validation), all three
+test suites, and two output assertions — that the build produced no server functions, and that
 no `draft: true` post reached the homepage.
 
 That second assertion carries its own vacuity guard: it fails if `dist/blog` is
@@ -129,9 +129,23 @@ result. Verified 2026-09-02 on all three ends — green on the real tree, red
 against a post forged to `draft: true` while still in `dist`, and refusing to
 run when the output was emptied.
 
+**`main` is protected** (since 2026-09-02): the `gate` check is required,
+branches must be up to date before merging (`strict`), force-pushes and branch
+deletion are refused, and the rule applies to admins too. Direct pushes to
+`main` are rejected — the docs-only carve-out that lets prose skip a PR does
+not survive that, and prose changes now go through a PR here like everything
+else. To lift it in an emergency:
+`gh api -X DELETE repos/chidekina/aethos-blog/branches/main/protection/enforce_admins`.
+
 Vercel's own preview deployment is a second, independent check on every PR. It
 has already caught a real defect that the local build could not: see the note on
 `readExact()` above.
+
+🔴 **Typechecking is `astro check`, never bare `tsc`.** This `src/` is 6 `.astro`
+files to 3 `.ts`, and `tsc` does not parse `.astro` at all — measured: a forged
+type error in `recommendations.astro` left `tsc --noEmit` reporting zero errors.
+`typescript` is pinned to `^6` because 7.x is the native compiler and does not
+expose the programmatic API `astro check` needs; bumping it breaks the CI step.
 
 ## Documentation map
 
