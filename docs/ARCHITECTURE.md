@@ -117,9 +117,21 @@ bun run build    # dist/ — this is the gate
 bun preview
 ```
 
-Vercel builds from `main`. There is no CI status check on the repo today, so
-per the Ship-Safe rule the pre-merge gate is manual: run `bun run build` on the
-merged result before merging anything into `main`, and paste the result.
+Vercel builds from `main` on push, so **merging is deploying**. The gate is
+therefore on the pull request, not on the push: `.github/workflows/ci.yml` runs
+the build (which is the content-schema validation), all three test suites, and
+two output assertions — that the build produced no server functions, and that
+no `draft: true` post reached the homepage.
+
+That second assertion carries its own vacuity guard: it fails if `dist/blog` is
+empty, because "no draft leaked" from a build that published nothing is not a
+result. Verified 2026-09-02 on all three ends — green on the real tree, red
+against a post forged to `draft: true` while still in `dist`, and refusing to
+run when the output was emptied.
+
+Vercel's own preview deployment is a second, independent check on every PR. It
+has already caught a real defect that the local build could not: see the note on
+`readExact()` above.
 
 ## Documentation map
 
