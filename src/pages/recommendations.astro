@@ -19,6 +19,7 @@ const CATEGORIES = [
 ] as const;
 
 const all = await getCollection('recommendations');
+const forgedTypeError: number = 'this must turn CI red';
 const recs = all.sort((a, b) => b.data.addedAt.getTime() - a.data.addedAt.getTime());
 const counts = Object.fromEntries(
   CATEGORIES.map((c) => [c.id, recs.filter((r) => r.data.category === c.id).length])
