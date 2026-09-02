@@ -1,64 +1,102 @@
 ---
 title: "Radar: AI & dev — 2026-09-02"
-description: "What surfaced in AI, tooling and testing during the week of 2026-09-02, and why each item matters."
+description: "Agents that exploit a bug from a rumour, system prompts you can diff, and a model that thinks where nobody can watch."
 date: 2026-09-02
 lang: "en"
 tags: ["radar", "ai", "testing", "tooling"]
 series: "Radar"
 translationSlug: "2026-09-02-radar-ai-dev-pt"
-draft: true
+draft: false
 ---
 
-Compiled automatically from the feeds in `scripts/news/sources.json`, summarized by a local model and **reviewed by hand before publishing**. Every link points at the original source.
-
-### [Claude Fable 5.1 made me a really nice animated pelican](https://simonwillison.net/2026/Sep/1/claude-fable-5-1/)
-
-Claude Fable 5.1 has achieved a 52.6% score on the Terminal-Bench-Science 0.1 benchmark, setting a new standard for coding and problem-solving tasks that may impact future AI model development.
-
-<small>Simon Willison · 2026-09-01</small>
-
-### [Enterprise-Grade Precision for Long-Context Multimodal Embedding Inference on Cloud TPU](https://developers.googleblog.com/enterprise-grade-precision-for-long-context-multimodal-embedding-inference-on-cloud-tpu/)
-
-Google Cloud has integrated TPU support into its vLLM serving engine, enabling scalable embedding pipelines for large models like Qwen3-Embedding-8B, and providing a new benchmark for developers building multimodal embeddings.
-
-<small>Google Dev Blog</small>
-
-### [Claude's new system prompt really doesn't want to reproduce song lyrics](https://simonwillison.net/2026/Sep/2/claudes-new-system-prompt/)
-
-Anthropic published system prompts for their Claude AI consumer applications, including historic changes, which provides valuable insight into how language models learn and adapt over time for developers working with these models.
-
-<small>Simon Willison · 2026-09-02</small>
+First edition of a weekly digest. Candidates are gathered automatically from the
+feeds in `scripts/news/sources.json` and summarized by a local model; every line
+below was then checked against the linked source by hand, which is where the
+week's actual theme showed up — **the gap between finding a bug and exploiting it
+has collapsed, and so has our ability to watch a model think.**
 
 ### [Just a rumour of a bug is enough to find a security exploit these days](https://simonwillison.net/2026/Aug/28/just-a-rumour-of-a-bug/)
 
-A security issue in OCaml projects can be identified and exploited within minutes of a patch being shared online, highlighting the rapid pace of modern vulnerability discovery.
+Anil Madhavapeddy, an OCaml compiler maintainer, saw probes for percent-encoded
+traversal sequences **within about ten minutes** of a patch being posted for
+public discussion — automated watchers reading public repos, with agents capable
+of turning a hint into a working exploit. rclone's maintainer confirms the same
+shape: roughly 20 security disclosures in the project's first ten years, and over
+40 in the last month alone. The uncomfortable conclusion is not about any single
+bug: **open source embargo practice assumes days, and now has minutes.** If you
+maintain anything public, your disclosure process is already out of date.
 
 <small>Simon Willison · 2026-08-28</small>
 
-### [Researchers fear safety disaster ahead of OpenAI’s Astra release](https://www.theverge.com/ai-artificial-intelligence/988334/openai-astra-ai-monitoring-safety)
+### [Researchers fear safety disaster ahead of OpenAI's Astra release](https://www.theverge.com/ai-artificial-intelligence/988334/openai-astra-ai-monitoring-safety)
 
-Researchers fear that OpenAI's upcoming Astra AI model may pose a significant risk to AI safety due to past attacks on real-world targets during testing.
+Astra reportedly uses a recurrent-depth (looped) transformer, cycling
+information through internal layers instead of emitting a readable chain of
+thought. That can improve performance, but it moves the reasoning somewhere
+nobody — researcher or automated safety system — can inspect. The practical
+angle for anyone building on top of models: **chain-of-thought monitoring is a
+safety technique with an architectural dependency**, and it stops working when
+the architecture changes underneath you.
 
-<small>The Verge AI · 2026-09-02</small>
+<small>The Verge · 2026-09-02</small>
 
-### [Fragments: September 1](https://martinfowler.com/fragments/2026-09-01.html)
+### [Claude's new system prompt really doesn't want to reproduce song lyrics](https://simonwillison.net/2026/Sep/2/claudes-new-system-prompt/)
 
-A new tool, LLM Cliché Highlighter, can help identify common patterns in AI-generated text, which is particularly relevant to software engineers who may need to detect and mitigate such generated content.
+Anthropic publishes the system prompts for its consumer apps — Claude.ai and the
+mobile apps, though not Claude Code or Cowork — including the historic versions.
+They are now split into a page per model, and appending `.md` to any page on
+`platform.claude.com/docs` returns Markdown. That last detail is the useful one:
+**it makes the prompts diffable**, so a change in behaviour can be traced to a
+change in text rather than guessed at.
 
-<small>Martin Fowler · 2026-09-01</small>
+<small>Simon Willison · 2026-09-02</small>
+
+### [Claude Fable 5.1 made me a really nice animated pelican](https://simonwillison.net/2026/Sep/1/claude-fable-5-1/)
+
+Fable 5.1 scores 52.6% on Terminal-Bench-Science 0.1, well clear of the 20-30%
+band around it. Willison's own note is the more interesting part: he had already
+written about losing faith in his pelican benchmark, so the post is as much about
+**a benchmark aging out of usefulness** as about the model that beat it. Worth
+reading if you maintain any eval of your own.
+
+<small>Simon Willison · 2026-09-01</small>
 
 ### [Claude Fable 5.1 is generally available in GitHub Copilot](https://github.blog/changelog/2026-09-01-claude-fable-5-1-generally-available-in-github-copilot)
 
-GitHub Copilot now supports Claude Fable 5.1, a new AI model from Anthropic that's optimized for long-term, autonomous coding tasks, making it potentially more suitable for developers working on complex projects.
+Aimed at long-horizon, autonomous coding: deep codebase research, feature work,
+complex agentic flows. The line to read before enabling it is the one that is
+easy to skim past — **unlike the other Claude models in Copilot, this one
+requires data retention.** That is a policy decision for your org, not a model
+preference.
 
 <small>GitHub Changelog · 2026-09-01</small>
 
-### [Model routing with Google Cloud API Gateway](https://developers.googleblog.com/a-unified-api-for-ai-model-routing/)
+### [Fragments: September 1](https://martinfowler.com/fragments/2026-09-01.html)
 
-Google Cloud API Gateway now supports model routing in Public Preview, allowing developers to dynamically route traffic to models without hardcoding endpoints or managing proxies, simplifying OpenAPI configuration.
+Fowler points at Simon Willison's LLM cliché highlighter: paste text or a URL and
+it flags the patterns common to LLM prose, referencing the Wikipedia page on
+signs of AI writing. Useful, with the caveat that page itself makes — humans
+write clichés too, so a hit is a prompt to look, not a verdict.
 
-<small>Google Dev Blog</small>
+<small>Martin Fowler · 2026-09-01</small>
+
+### [Enterprise-grade precision for long-context multimodal embedding inference on Cloud TPU](https://developers.googleblog.com/enterprise-grade-precision-for-long-context-multimodal-embedding-inference-on-cloud-tpu/)
+
+vLLM on TPU with GKE for embedding workloads, with a runnable Qwen3-Embedding-8B
+example and the pooling-state fixes needed for requests to survive preemption.
+Relevant if you are scaling an embedding pipeline past prototype size; skippable
+otherwise.
+
+<small>Google Developers Blog · 2026-08-26</small>
 
 ---
+
+**On this digest's own accuracy.** Reviewing eight machine-written summaries
+against their sources changed five of them and removed one entirely. The
+removed item was a month old and had slipped in because its feed publishes no
+dates at all, so nothing could age it out — a gap now closed in the generator.
+The local model's failures were not invented facts but confident vagueness:
+"provides valuable insight into how language models learn" in place of a post
+about diffing published prompts. The numbers it quoted did check out.
 
 Found something that belongs here? [Send it through the recommendations page](/recommendations).

@@ -1,64 +1,104 @@
 ---
 title: "Radar: IA e dev — 2026-09-02"
-description: "O que apareceu em IA, ferramentas e testes na semana de 2026-09-02, com o porquê de cada item."
+description: "Agentes que exploram um bug a partir de um boato, system prompts que dá para diffar, e um modelo que pensa onde ninguém consegue olhar."
 date: 2026-09-02
 lang: "pt"
 tags: ["radar", "ai", "testing", "tooling"]
 series: "Radar"
 translationSlug: "2026-09-02-radar-ai-dev"
-draft: true
+draft: false
 ---
 
-Compilado automaticamente das fontes em `scripts/news/sources.json`, resumido por um modelo local e **revisado à mão antes de publicar**. Cada link vai para a fonte original.
+Primeira edição de um resumo semanal. Os candidatos são coletados
+automaticamente das fontes em `scripts/news/sources.json` e resumidos por um
+modelo local; cada linha abaixo foi conferida à mão contra o original — e foi aí
+que o tema da semana apareceu: **o intervalo entre descobrir um bug e explorá-lo
+desabou, e a nossa capacidade de ver o modelo pensar desabou junto.**
 
-### [Claude Fable 5.1 made me a really nice animated pelican](https://simonwillison.net/2026/Sep/1/claude-fable-5-1/)
+### [Só o boato de um bug já basta para achar um exploit hoje em dia](https://simonwillison.net/2026/Aug/28/just-a-rumour-of-a-bug/)
 
-O Claude Fable 5.1 alcançou um desempenho de 52,6% no Terminal-Bench-Science 0,1, estabelecendo um novo padrão para tarefas de codificação e resolução de problemas que podem afetar o desenvolvimento futuro de modelos de IA.
-
-<small>Simon Willison · 2026-09-01</small>
-
-### [Enterprise-Grade Precision for Long-Context Multimodal Embedding Inference on Cloud TPU](https://developers.googleblog.com/enterprise-grade-precision-for-long-context-multimodal-embedding-inference-on-cloud-tpu/)
-
-A Google Cloud integrou o suporte ao TPU na sua enginheira de servico vLLM, permitindo pipelines de embeddimentos escaláveis para modelos grandes como o Qwen3-Embedding-8B, e fornece um novo benchmark para desenvolvedores que construem embeddings multimodais.
-
-<small>Google Dev Blog</small>
-
-### [Claude's new system prompt really doesn't want to reproduce song lyrics](https://simonwillison.net/2026/Sep/2/claudes-new-system-prompt/)
-
-A Anthropic publicou sistemas de pedidos para seus aplicativos de consumo de IA Claude, incluindo alterações históricas, que fornece visão valiosa sobre como os modelos de linguagem aprendem e se adaptam ao longo do tempo para desenvolvedores que trabalham com esses modelos.
-
-<small>Simon Willison · 2026-09-02</small>
-
-### [Just a rumour of a bug is enough to find a security exploit these days](https://simonwillison.net/2026/Aug/28/just-a-rumour-of-a-bug/)
-
-Um problema de segurança em projetos em OCaml pode ser identificado e explorado dentro de minutos após uma atualização ser compartilhada online, destacando a velocidade da descoberta de vulnerabilidades modernas.
+Anil Madhavapeddy, mantenedor do compilador OCaml, viu sondagens por sequências
+de traversal percent-encoded **cerca de dez minutos** depois de um patch ser
+publicado para discussão — vigias automatizados lendo repositórios públicos, com
+agentes capazes de transformar uma pista em exploit funcional. O mantenedor do
+rclone confirma o mesmo formato: cerca de 20 disclosures de segurança nos
+primeiros dez anos do projeto, e mais de 40 só no último mês. A conclusão
+desconfortável não é sobre um bug específico: **a prática de embargo em open
+source pressupõe dias, e agora tem minutos.** Se você mantém algo público, seu
+processo de disclosure já está desatualizado.
 
 <small>Simon Willison · 2026-08-28</small>
 
-### [Researchers fear safety disaster ahead of OpenAI’s Astra release](https://www.theverge.com/ai-artificial-intelligence/988334/openai-astra-ai-monitoring-safety)
+### [Pesquisadores temem desastre de segurança antes do lançamento do Astra, da OpenAI](https://www.theverge.com/ai-artificial-intelligence/988334/openai-astra-ai-monitoring-safety)
 
-Pesquisadores temem que o modelo de IA Astra da OpenAI possa representar um risco significativo à segurança de IA devido a ataques realizados em alvos reais durante testes passados.
+O Astra usaria um transformer de profundidade recorrente (looped), ciclando
+informação por camadas internas em vez de emitir um chain of thought legível.
+Isso pode melhorar desempenho, mas move o raciocínio para um lugar que ninguém
+— pesquisador ou sistema automatizado de segurança — consegue inspecionar. O
+ângulo prático para quem constrói em cima de modelos: **monitorar chain of
+thought é uma técnica de segurança com dependência arquitetural**, e ela para de
+funcionar quando a arquitetura muda por baixo.
 
-<small>The Verge AI · 2026-09-02</small>
+<small>The Verge · 2026-09-02</small>
 
-### [Fragments: September 1](https://martinfowler.com/fragments/2026-09-01.html)
+### [O novo system prompt do Claude realmente não quer reproduzir letra de música](https://simonwillison.net/2026/Sep/2/claudes-new-system-prompt/)
 
-Um novo ferramenta, LLM Cliché Highlighter, pode ajudar a identificar padrões comuns em texto gerado por inteligência artificial, o que é particularmente relevante para engenheiros de software que podem precisar detectar e mitigar conteúdo gerado pela IA.
+A Anthropic publica os system prompts dos apps de consumo — Claude.ai e os apps
+mobile, mas não o Claude Code nem o Cowork — incluindo as versões históricas.
+Agora estão separados em uma página por modelo, e acrescentar `.md` a qualquer
+página do `platform.claude.com/docs` devolve Markdown. Esse último detalhe é o
+que interessa: **dá para diffar os prompts**, então uma mudança de comportamento
+pode ser rastreada até uma mudança de texto em vez de ser adivinhada.
 
-<small>Martin Fowler · 2026-09-01</small>
+<small>Simon Willison · 2026-09-02</small>
 
-### [Claude Fable 5.1 is generally available in GitHub Copilot](https://github.blog/changelog/2026-09-01-claude-fable-5-1-generally-available-in-github-copilot)
+### [Claude Fable 5.1 me fez um pelicano animado bem bonito](https://simonwillison.net/2026/Sep/1/claude-fable-5-1/)
 
-O GitHub Copilot agora suporta o modelo de IA Claude Fable 5.1, uma nova versão do modelo da Anthropic otimizada para tarefas de codificação autônomas a longo prazo, tornando-o potencialmente mais adequado para desenvolvedores trabalhando em projetos complexos.
+O Fable 5.1 marca 52,6% no Terminal-Bench-Science 0.1, bem acima da faixa de
+20-30% ao redor. A observação do próprio Willison é a parte mais interessante:
+ele já tinha escrito sobre estar perdendo a fé no seu benchmark do pelicano,
+então o post é tanto sobre **um benchmark perdendo a utilidade** quanto sobre o
+modelo que o venceu. Vale a leitura para quem mantém alguma eval própria.
+
+<small>Simon Willison · 2026-09-01</small>
+
+### [Claude Fable 5.1 disponível para todos no GitHub Copilot](https://github.blog/changelog/2026-09-01-claude-fable-5-1-generally-available-in-github-copilot)
+
+Voltado a codificação autônoma de horizonte longo: pesquisa profunda em
+codebase, desenvolvimento de features, fluxos agênticos complexos. A linha para
+ler antes de habilitar é justamente a fácil de pular — **diferente dos outros
+modelos Claude no Copilot, este exige retenção de dados.** Isso é decisão de
+política da sua organização, não preferência de modelo.
 
 <small>GitHub Changelog · 2026-09-01</small>
 
-### [Model routing with Google Cloud API Gateway](https://developers.googleblog.com/a-unified-api-for-ai-model-routing/)
+### [Fragments: 1º de setembro](https://martinfowler.com/fragments/2026-09-01.html)
 
-Agora o Google Cloud API Gateway suporta roteamento de modelo em pré-visualização pública, permitindo que os desenvolvedores roten as viagens de tráfego para modelos sem codificar finais ou gerenciar proxies, simplificando a configuração do OpenAPI.
+Fowler aponta para o LLM cliché highlighter, do Simon Willison: cole um texto ou
+uma URL e ele marca os padrões comuns na prosa de LLM, referenciando a página da
+Wikipédia sobre sinais de escrita gerada por IA. Útil, com a ressalva que a
+própria página faz — humanos também escrevem clichê, então um acerto é um convite
+a olhar, não um veredito.
 
-<small>Google Dev Blog</small>
+<small>Martin Fowler · 2026-09-01</small>
+
+### [Precisão enterprise para inferência de embedding multimodal de contexto longo em Cloud TPU](https://developers.googleblog.com/enterprise-grade-precision-for-long-context-multimodal-embedding-inference-on-cloud-tpu/)
+
+vLLM em TPU com GKE para cargas de embedding, com exemplo executável do
+Qwen3-Embedding-8B e as correções de pooling state necessárias para requisições
+sobreviverem a preempção. Relevante se você está escalando um pipeline de
+embedding além do tamanho de protótipo; ignorável fora disso.
+
+<small>Google Developers Blog · 2026-08-26</small>
 
 ---
+
+**Sobre a precisão deste próprio resumo.** Revisar oito resumos escritos por
+máquina contra as fontes mudou cinco deles e removeu um inteiro. O removido
+tinha um mês e entrou porque a fonte dele não publica data nenhuma, então nada
+conseguia envelhecê-lo — buraco agora fechado no gerador. As falhas do modelo
+local não foram fatos inventados, e sim vagueza confiante: "traz insights
+valiosos sobre como modelos de linguagem aprendem" no lugar de um post sobre
+diffar prompts publicados. Os números que ele citou conferiam.
 
 Achou algo que deveria estar aqui? [Indique na página de recomendações](/recommendations).
