@@ -19,8 +19,24 @@ the glob, never silence the warning.
 1. **The site is static.** No Astro adapter, no server routes, no runtime
    database. Reader input arrives through GitHub issue forms and lands in the
    repo as content. Adding an adapter is an architecture decision, not a patch.
-2. **Generated posts are drafts.** Anything written by `scripts/news/` carries
-   `draft: true` and is published only by a human editing that flag.
+2. **Generated posts are born drafts.** Everything `scripts/news/` writes carries
+   `draft: true`; publishing is a human editing that flag after checking each
+   line against its source.
+
+   🔴 **This invariant is deliberately NOT in the validation block below, and
+   the reason matters.** Two grep-shaped versions of it were tried and both were
+   worthless. Globbing the published posts made *publishing a reviewed digest* —
+   the intended path — a violation: the gate was aimed at the artifact instead
+   of the thing that produces it. Retargeting it at the generator then read
+   green against a generator mutated to emit `draft: false`, because the
+   frontmatter lives inside a template literal and this validator blanks string
+   text before matching. A rule that cannot see its own subject is worse than no
+   rule: it reports enforcement it never performed.
+
+   The enforcement is `scripts/news/fetch-news.test.sh` ARM 8, which runs the
+   generator and asserts both emitted files carry the flag. Verified by mutation
+   on 2026-09-02: flipping `draft: true` to `false` in the generator turns the
+   suite red (18/1) on exactly that assertion, while the contract stayed green.
 3. **Posts come in pairs.** Every post has an `en` and a `pt` counterpart linked
    by `translationSlug`.
 4. **Content schemas are the gate.** `src/content/config.ts` validates every
@@ -36,10 +52,6 @@ the glob, never silence the warning.
   in: "astro.config.mjs"
   absent: true
   message: "An adapter turns the static site into a server deployment — see CONTRACT invariant 1. Deliberate? Update this contract in the same commit."
-
-- pattern: "draft: true"
-  in: "src/content/blog/*-radar-ai-dev*.mdx"
-  message: "Generated radar digests must stay draft:true until a human reviews them (invariant 2)."
 
 - pattern: "translationSlug"
   in: "src/content/blog/*.mdx"

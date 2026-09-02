@@ -3,6 +3,8 @@
   "maxAgeDays": 8,
   "maxItems": 8,
   "minScore": 2,
+  "_maxUndated": "items whose feed publishes no date cannot age out; at most this many reach one digest",
+  "maxUndated": 2,
   "sources": [
     { "name": "Simon Willison",        "url": "https://simonwillison.net/atom/everything/",            "tag": "ai",      "weight": 3 },
     { "name": "Hacker News (front)",   "url": "https://hnrss.org/frontpage?points=250",                 "tag": "dev",     "weight": 1 },

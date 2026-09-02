@@ -268,9 +268,24 @@ for (const { src, res } of results) {
 }
 
 const totalFetched = pool.length;
-// A feed with no usable dates would otherwise vanish entirely under the window,
-// so undated items are kept and sorted last rather than silently dropped.
-pool = pool.filter((i) => !i.date || Number.isNaN(i.date.getTime()) || i.date.getTime() >= cutoff);
+
+// Undated items are KEPT, because a feed with broken timestamps would otherwise
+// vanish under the window without a word. But "kept" used to mean "immortal":
+// nothing can age out an item that has no date, so a month-old post surfaces as
+// this week's news forever. Measured 2026-09-02 — the Google Developers Blog
+// feed is RSS 2.0 with no date element at all on its items, and a post from
+// August 4th reached the first digest as fresh.
+//
+// So: keep them, name the feeds that force it, and cap how many can reach one
+// digest. Silence about a dateless feed is what made the first miss invisible.
+const dated = (i) => i.date && !Number.isNaN(i.date.getTime());
+const datelessBySource = new Map();
+for (const i of pool) if (!dated(i)) datelessBySource.set(i.source, (datelessBySource.get(i.source) ?? 0) + 1);
+for (const [src, n] of datelessBySource) {
+  log(`NO DATES  ${src} — ${n} items carry no parseable date; they cannot age out and are capped at ${cfg.maxUndated ?? 2} per digest`);
+}
+
+pool = pool.filter((i) => !dated(i) || i.date.getTime() >= cutoff);
 const afterAge = pool.length;
 pool = pool.filter((i) => !seenSet.has(i.link));
 const afterSeen = pool.length;
@@ -280,12 +295,18 @@ const scored = pool
   .filter((i) => i.score >= (cfg.minScore ?? 2))
   .sort((a, b) => b.score - a.score || (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
 
-// Never let one loud feed fill the digest.
+// Never let one loud feed fill the digest, and never let undated items — which
+// no window can expire — take it over.
 const perSource = new Map();
 const shortlist = [];
+let undatedUsed = 0;
 for (const it of scored) {
   const n = perSource.get(it.source) ?? 0;
   if (n >= 3) continue;
+  if (!dated(it)) {
+    if (undatedUsed >= (cfg.maxUndated ?? 2)) continue;
+    undatedUsed++;
+  }
   perSource.set(it.source, n + 1);
   shortlist.push(it);
   if (shortlist.length >= (cfg.maxItems ?? 8)) break;
