@@ -12,7 +12,12 @@
 # silent runs exactly this way).
 set -uo pipefail
 
-REPO="/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog"
+# Derived from this script's own location, never hardcoded. An absolute path
+# baked in here works on the machine it was written on and silently points at
+# nothing everywhere else — CI caught exactly that on 2026-09-02, while the
+# local suite passed because the hardcoded path happened to exist locally. A
+# moved or re-cloned repo would have failed the same way, weekly and quietly.
+REPO="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 LOG="${NEWS_DIGEST_LOG:-$REPO/scripts/news/digest.log}"
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }

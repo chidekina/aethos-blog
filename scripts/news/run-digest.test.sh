@@ -74,6 +74,26 @@ grep -q 'RESULT=ok' "$SCRIPT"               && ok "success case named"  || bad "
 grep -q 'RESULT=nothing-produced' "$SCRIPT" && ok "empty case named"    || bad "empty case named"
 grep -q 'RESULT=BROKEN' "$SCRIPT"           && ok "instrument case named" || bad "instrument case named"
 
+echo "ARM 6 — the script targets ITS OWN tree, not a hardcoded absolute path"
+# CI caught this while the local suite passed: run-digest.sh had the author's
+# repo path baked in, so it worked on one machine and pointed at nothing
+# everywhere else. Copy the wrapper somewhere else and it must follow.
+REL="$T/relocated"
+mkdir -p "$REL/scripts/news"
+cp "$SCRIPT" "$REL/scripts/news/"
+printf '#!/usr/bin/env node\nconsole.log("REPO_SEEN=" + process.argv[1]);\n' > "$REL/scripts/news/fetch-news.mjs"
+LOG6="$T/relocated.log"
+env -i HOME="$HOME" PATH=/usr/bin:/bin SHELL=/bin/sh NEWS_DIGEST_LOG="$LOG6" \
+    /bin/sh -c "$REL/scripts/news/run-digest.sh" >/dev/null 2>&1
+OUT6="$(cat "$LOG6" 2>/dev/null)"
+has "$OUT6" "$REL/scripts/news/fetch-news.mjs" \
+  && ok "relocated copy runs its own fetch-news.mjs" \
+  || bad "relocated copy runs its own fetch-news.mjs" "$OUT6"
+# negative control: it must NOT have reached back into the real repo
+has "$OUT6" "$REPO/scripts/news/fetch-news.mjs" \
+  && bad "does not reach back into the original repo" "hardcoded path still in play" \
+  || ok "does not reach back into the original repo"
+
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
