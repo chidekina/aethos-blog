@@ -12,17 +12,59 @@
 # silent runs exactly this way).
 set -uo pipefail
 
-REPO="/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog"
+# Derived from this script's own location, never hardcoded. An absolute path
+# baked in here works on the machine it was written on and silently points at
+# nothing everywhere else — CI caught exactly that on 2026-09-02, while the
+# local suite passed because the hardcoded path happened to exist locally. A
+# moved or re-cloned repo would have failed the same way, weekly and quietly.
+REPO="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 LOG="${NEWS_DIGEST_LOG:-$REPO/scripts/news/digest.log}"
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
 
-PATH="/usr/local/bin:/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+# NEWS_PATH_PREPEND exists so the suite can isolate this lookup. Without it a
+# machine that happens to carry node in /usr/local/bin — a GitHub runner does —
+# satisfies `command -v node` and the nvm branch below is never exercised, so
+# its arms pass without testing anything. Production never sets it.
+PATH="${NEWS_PATH_PREPEND:-/usr/local/bin:/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.bun/bin:$HOME/.local/bin}:$PATH"
 export PATH
 
+# Measured 2026-09-02 by running this script under a real cron environment
+# (`env -i PATH=/usr/bin:/bin`): node is installed by nvm at
+# ~/.nvm/versions/node/<version>/bin/node and is on NO fixed PATH. Prepending
+# the usual directories was not enough — the guard below fired FATAL, which is
+# the right failure, but the job would still never have produced a digest.
+#
+# The version is part of the path, so hardcoding one breaks at the next nvm
+# upgrade — silently, in a weekly job nobody watches. Resolve the newest
+# installed version instead, and verify it actually runs.
 NODE_BIN="$(command -v node || true)"
+if [ -z "$NODE_BIN" ] && [ -d "$HOME/.nvm/versions/node" ]; then
+  # `sort -V` orders v9 before v10; plain sort does not.
+  for d in $(ls -1 "$HOME/.nvm/versions/node" 2>/dev/null | sort -V -r); do
+    if [ -x "$HOME/.nvm/versions/node/$d/bin/node" ]; then
+      NODE_BIN="$HOME/.nvm/versions/node/$d/bin/node"
+      break
+    fi
+  done
+fi
+
 if [ -z "$NODE_BIN" ]; then
-  log "FATAL: node not found (PATH=$PATH) — digest did not run"
+  log "FATAL: node not found (PATH=$PATH, no nvm versions under $HOME/.nvm) — digest did not run"
+  exit 2
+fi
+
+# A path that exists is not a binary that runs. The pipeline needs global fetch,
+# which is Node 18+; an old nvm version left on disk would otherwise fail deep
+# inside the script with a confusing error instead of here with a clear one.
+NODE_VER="$("$NODE_BIN" -v 2>/dev/null || true)"
+case "$NODE_VER" in
+  v[0-9]*) : ;;
+  *) log "FATAL: $NODE_BIN did not answer -v — digest did not run"; exit 2 ;;
+esac
+NODE_MAJOR="$(printf '%s' "$NODE_VER" | sed 's/^v//; s/\..*//')"
+if [ "$NODE_MAJOR" -lt 18 ]; then
+  log "FATAL: $NODE_BIN is $NODE_VER; the digest needs Node 18+ for global fetch — digest did not run"
   exit 2
 fi
 
@@ -35,7 +77,7 @@ printf '%s\n' "$OUT" >>"$LOG"
 
 case "$STATUS" in
   0) log "RESULT=ok — drafts written, review them with: git -C $REPO status" ;;
-  1) log "RESULT=no-new-items — feeds were reachable, nothing cleared the filters" ;;
+  1) log "RESULT=nothing-produced — feeds were reachable; either nothing cleared the filters or the target files already existed. The [news] lines above say which." ;;
   2) log "RESULT=BROKEN — instrument fault (network, Ollama, or config). Not a quiet news day." ;;
   *) log "RESULT=unexpected exit $STATUS" ;;
 esac

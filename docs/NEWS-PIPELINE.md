@@ -29,7 +29,7 @@ bash  scripts/news/fetch-news.test.sh              # 19 assertions, 8 arms
 | code | meaning | what to do |
 |---:|---|---|
 | 0 | drafts written | review them |
-| 1 | reachable feeds, nothing cleared the filters | nothing; a genuinely quiet week |
+| 1 | nothing was produced — either nothing cleared the filters, or the target files already existed | read the `[news]` lines; they say which |
 | 2 | **broken instrument** — no network, every feed down, Ollama unusable, config unreadable | fix the tool; this is never a verdict about the news |
 
 The 1-vs-2 split is the whole point. A dead Ollama and a quiet news week both
@@ -45,12 +45,32 @@ crontab -e
 0 8 * * 1 /home/hidekina/projetos/aethos/aethos-ideas/aethos-blog/scripts/news/run-digest.sh
 ```
 
-`run-digest.sh` prepends the real PATH before doing anything and **checks that
-`node` resolves**, exiting 2 with a logged `FATAL` if it does not. Cron runs
-with `PATH=/usr/bin:/bin`; a node installed by brew or a version manager is not
-on it. Measured on this machine 2026-08-31: a different daily job died at exit
-127 for exactly this reason and produced roughly 540 runs with **zero log
-lines** — the failure was indistinguishable from "nothing to do".
+**Installed 2026-09-02.** `crontab -l | grep aethos-blog` confirms it.
+
+`run-digest.sh` resolves node itself. Cron runs with `PATH=/usr/bin:/bin`, and
+on this machine node is installed by **nvm**, under
+`~/.nvm/versions/node/<version>/bin/` — on no fixed PATH at all. Prepending the
+usual directories was not enough; the wrapper walks the nvm versions directory,
+picks the newest with `sort -V` (plain sort puts v9 above v22), and verifies the
+binary answers `-v` with Node 18+ before running anything.
+
+🔴 **This was measured, not assumed.** The first run under a real cron
+environment (`env -i PATH=/usr/bin:/bin`) exited 2 with
+`FATAL: node not found`. The guard behaved exactly as designed — and the job
+would still never have produced a digest. A guard that fails loudly is not the
+same as a job that works; only running it the way cron will runs proves the
+second.
+
+Reproduce that check any time:
+
+```bash
+env -i HOME=$HOME PATH=/usr/bin:/bin SHELL=/bin/sh \
+  NEWS_DIGEST_LOG=/tmp/cron-sim.log scripts/news/run-digest.sh; echo "exit=$?"
+cat /tmp/cron-sim.log
+```
+
+Covered by `scripts/news/run-digest.test.sh` (12 assertions, 5 arms, 2
+mutations), which runs the real wrapper under `env -i` with stub nvm trees.
 
 Verify the job is alive by its log, never by the crontab entry:
 
@@ -60,7 +80,13 @@ grep -c 'RESULT=' scripts/news/digest.log     # runs that actually reached a ver
 ```
 
 An empty or absent log after a Monday means the job did not run at all — a
-different problem from `RESULT=no-new-items`.
+different problem from `RESULT=nothing-produced`.
+
+🔴 **A run that writes no file must not report success.** Measured 2026-09-02:
+re-running on a day whose digest already existed skipped both files and still
+logged `DIGEST_OK ... drafts written`. It now logs `NOTHING_WRITTEN` and exits
+1. That was exactly the false-green this pipeline exists to avoid, sitting in
+the pipeline itself.
 
 ## Tuning what gets picked
 

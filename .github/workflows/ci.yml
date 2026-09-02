@@ -1,0 +1,71 @@
+name: CI
+
+# Vercel deploys from main on push, so the gate has to be the PULL REQUEST.
+# A check that only ran on push would report after the deploy it was meant to
+# guard. `on:` is load-bearing: a workflow with complete steps and no trigger
+# runs never, and reads as a green gate that simply has nothing to say.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The content schemas in src/content/config.ts are the only validation
+      # layer for posts and recommendations, so a passing build IS the check
+      # that every content file is well-formed.
+      - name: Build (schema validation, OG images, RSS, sitemap)
+        run: bun run build
+
+      # These run the real scripts against fixtures, no network required.
+      - name: News pipeline suite
+        run: bash scripts/news/fetch-news.test.sh
+
+      - name: Cron wrapper suite
+        run: bash scripts/news/run-digest.test.sh
+
+      - name: Recommendations suite
+        run: bash scripts/recommendations/from-issue.test.sh
+
+      # Two-ended: the site must be static (no adapter), and the drafts a
+      # generated digest is born with must be visible in the output. A build
+      # that silently published every draft would pass everything above.
+      - name: Assert the built site is static
+        run: |
+          test ! -d .vercel/output/functions || {
+            echo "::error::Server functions in the build output — the site is meant to be static (CONTRACT invariant 1)"
+            exit 1
+          }
+
+      - name: Assert drafts stay out of the published output
+        run: |
+          python3 - <<'PY'
+          import glob, os, re, sys
+          drafts = []
+          for f in glob.glob('src/content/blog/*.mdx'):
+              head = open(f, encoding='utf-8').read().split('---')[1]
+              if re.search(r'^draft:\s*true\s*$', head, re.M):
+                  drafts.append(os.path.basename(f)[:-4])
+          index = open('dist/index.html', encoding='utf-8').read()
+          # Positive control first: if the homepage lists no posts at all, the
+          # absence of a draft below would prove nothing.
+          published = [os.path.basename(f) for f in glob.glob('dist/blog/*/index.html')]
+          if not published:
+              print('::error::dist/blog is empty — the check below would be vacuous'); sys.exit(1)
+          leaked = [d for d in drafts if d in index]
+          if leaked:
+              print(f'::error::draft posts reached the homepage: {leaked}'); sys.exit(1)
+          print(f'ok: {len(drafts)} draft(s) held back, {len(published)} post(s) published')
+          PY
