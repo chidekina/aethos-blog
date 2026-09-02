@@ -1,0 +1,10 @@
+{
+  "title": "Testcontainers",
+  "url": "https://testcontainers.com/",
+  "category": "tool",
+  "description": "Real dependencies in integration tests — spin a throwaway Postgres or Redis per suite instead of mocking the database.",
+  "lang": "en",
+  "tags": ["testing", "devops", "integration"],
+  "recommendedBy": "chidekina",
+  "addedAt": "2026-09-02"
+}
