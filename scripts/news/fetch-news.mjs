@@ -373,4 +373,14 @@ if (written.length > 0) {
 }
 
 for (const f of written) log(`WROTE ${f}`);
-log(`DIGEST_OK items=${shortlist.length} files=${written.length} — both drafts. Review, then set draft: false.`);
+
+// Measured 2026-09-02 under a real cron environment: when both target files
+// already existed the run skipped both, wrote nothing, and still logged
+// "DIGEST_OK ... drafts written". A run that produced no file must not report
+// success — that is the false-green this whole script is built to avoid.
+if (written.length === 0) {
+  log(`NOTHING_WRITTEN — every target file already existed. Delete them (and their links from seen.json) to regenerate.`);
+  process.exit(1);
+}
+
+log(`DIGEST_OK items=${shortlist.length} files=${written.length} — drafts, not published. Review, then set draft: false.`);
