@@ -6,23 +6,259 @@
   "_maxUndated": "items whose feed publishes no date cannot age out; at most this many reach one digest",
   "maxUndated": 2,
   "sources": [
-    { "name": "Simon Willison",        "url": "https://simonwillison.net/atom/everything/",            "tag": "ai",      "weight": 3 },
-    { "name": "Hacker News (front)",   "url": "https://hnrss.org/frontpage?points=250",                 "tag": "dev",     "weight": 1 },
-    { "name": "Pragmatic Engineer",    "url": "https://blog.pragmaticengineer.com/rss/",                 "tag": "dev",     "weight": 2 },
-    { "name": "OpenAI News",           "url": "https://openai.com/news/rss.xml",                        "tag": "ai",      "weight": 2 },
-    { "name": "GitHub Changelog",      "url": "https://github.blog/changelog/feed/",                    "tag": "tooling", "weight": 2 },
-    { "name": "Google Dev Blog",       "url": "https://developers.googleblog.com/feeds/posts/default",  "tag": "ai",      "weight": 1 },
-    { "name": "Martin Fowler",         "url": "https://martinfowler.com/feed.atom",                     "tag": "testing", "weight": 3 },
-    { "name": "InfoQ",                 "url": "https://feed.infoq.com/",                                "tag": "dev",     "weight": 1 },
-    { "name": "The Verge AI",          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "tag": "ai", "weight": 1 }
+    {
+      "name": "Simon Willison",
+      "url": "https://simonwillison.net/atom/everything/",
+      "tag": "ai",
+      "weight": 3
+    },
+    {
+      "name": "Hacker News (front)",
+      "url": "https://hnrss.org/frontpage?points=250",
+      "tag": "dev",
+      "weight": 1
+    },
+    {
+      "name": "Pragmatic Engineer",
+      "url": "https://blog.pragmaticengineer.com/rss/",
+      "tag": "dev",
+      "weight": 2
+    },
+    {
+      "name": "OpenAI News",
+      "url": "https://openai.com/news/rss.xml",
+      "tag": "ai",
+      "weight": 2
+    },
+    {
+      "name": "GitHub Changelog",
+      "url": "https://github.blog/changelog/feed/",
+      "tag": "tooling",
+      "weight": 2
+    },
+    {
+      "name": "Google Dev Blog",
+      "url": "https://developers.googleblog.com/feeds/posts/default",
+      "tag": "ai",
+      "weight": 1
+    },
+    {
+      "name": "Martin Fowler",
+      "url": "https://martinfowler.com/feed.atom",
+      "tag": "testing",
+      "weight": 3
+    },
+    {
+      "name": "InfoQ",
+      "url": "https://feed.infoq.com/",
+      "tag": "dev",
+      "weight": 1
+    },
+    {
+      "name": "The Verge AI",
+      "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+      "tag": "ai",
+      "weight": 1
+    },
+    {
+      "name": "MCP blog",
+      "url": "https://blog.modelcontextprotocol.io/index.xml",
+      "tag": "ai",
+      "weight": 3
+    },
+    {
+      "name": "Hamel Husain",
+      "url": "https://hamel.dev/index.xml",
+      "tag": "ai",
+      "weight": 3
+    },
+    {
+      "name": "Eugene Yan",
+      "url": "https://eugeneyan.com/rss/",
+      "tag": "ai",
+      "weight": 3
+    },
+    {
+      "name": "Drew Breunig",
+      "url": "https://www.dbreunig.com/feed.xml",
+      "tag": "ai",
+      "weight": 2
+    },
+    {
+      "name": "Shrivu Shankar",
+      "url": "https://blog.sshh.io/feed",
+      "tag": "ai",
+      "weight": 2
+    },
+    {
+      "name": "Answer.AI",
+      "url": "https://www.answer.ai/index.xml",
+      "tag": "ai",
+      "weight": 2
+    },
+    {
+      "name": "Astro Blog",
+      "url": "https://astro.build/rss.xml",
+      "tag": "tooling",
+      "weight": 3
+    },
+    {
+      "name": "Bun Blog",
+      "url": "https://bun.com/rss.xml",
+      "tag": "tooling",
+      "weight": 3
+    },
+    {
+      "name": "TypeScript Devblog",
+      "url": "https://devblogs.microsoft.com/typescript/feed/",
+      "tag": "tooling",
+      "weight": 3
+    },
+    {
+      "name": "Vite Blog",
+      "url": "https://vite.dev/blog.rss",
+      "tag": "tooling",
+      "weight": 2
+    },
+    {
+      "name": "Drizzle releases",
+      "url": "https://github.com/drizzle-team/drizzle-orm/releases.atom",
+      "tag": "tooling",
+      "weight": 2
+    },
+    {
+      "name": "Crunchy Data",
+      "url": "https://www.crunchydata.com/blog/rss.xml",
+      "tag": "dev",
+      "weight": 3
+    },
+    {
+      "name": "This Week In React",
+      "url": "https://thisweekinreact.com/newsletter/rss.xml",
+      "tag": "dev",
+      "weight": 3
+    },
+    {
+      "name": "PostgreSQL News",
+      "url": "https://www.postgresql.org/news.rss",
+      "tag": "dev",
+      "weight": 2
+    },
+    {
+      "name": "Marc Brooker",
+      "url": "https://brooker.co.za/blog/rss.xml",
+      "tag": "dev",
+      "weight": 2
+    },
+    {
+      "name": "Dan Luu",
+      "url": "https://danluu.com/atom.xml",
+      "tag": "dev",
+      "weight": 2
+    },
+    {
+      "name": "OpenTelemetry",
+      "url": "https://opentelemetry.io/blog/index.xml",
+      "tag": "dev",
+      "weight": 2
+    },
+    {
+      "name": "Google Testing Blog",
+      "url": "https://testing.googleblog.com/feeds/posts/default",
+      "tag": "testing",
+      "weight": 3
+    },
+    {
+      "name": "Kent Beck",
+      "url": "https://newsletter.kentbeck.com/feed",
+      "tag": "testing",
+      "weight": 3
+    },
+    {
+      "name": "Hillel Wayne",
+      "url": "https://buttondown.com/hillelwayne/rss",
+      "tag": "testing",
+      "weight": 3
+    },
+    {
+      "name": "Mark Seemann",
+      "url": "https://blog.ploeh.dk/rss.xml",
+      "tag": "testing",
+      "weight": 3
+    },
+    {
+      "name": "Michael Lynch",
+      "url": "https://mtlynch.io/feed.xml",
+      "tag": "dev",
+      "weight": 3
+    },
+    {
+      "name": "Jitbit",
+      "url": "https://www.jitbit.com/alexblog/rss/",
+      "tag": "dev",
+      "weight": 3
+    },
+    {
+      "name": "AkitaOnRails",
+      "url": "https://www.akitaonrails.com/index.xml",
+      "tag": "br",
+      "weight": 3
+    },
+    {
+      "name": "Hipsters Ponto Tech",
+      "url": "https://www.hipsters.tech/feed/",
+      "tag": "br",
+      "weight": 3
+    }
   ],
   "keywords": {
-    "ai": 3, "llm": 3, "agent": 2, "claude": 3, "gpt": 2, "gemini": 2, "copilot": 2,
-    "prompt": 2, "rag": 2, "embedding": 2, "inference": 2, "model": 1, "openai": 2, "anthropic": 3,
-    "test": 3, "testing": 3, "tdd": 3, "e2e": 2, "playwright": 2, "vitest": 2, "coverage": 2,
-    "typescript": 2, "javascript": 1, "react": 1, "astro": 2, "node": 1, "bun": 2,
-    "postgres": 2, "sqlite": 2, "docker": 2, "ci": 1, "devtools": 2, "developer": 2,
-    "security": 2, "benchmark": 2, "eval": 3, "mcp": 3, "open source": 1
+    "ai": 3,
+    "llm": 3,
+    "agent": 2,
+    "claude": 3,
+    "gpt": 2,
+    "gemini": 2,
+    "copilot": 2,
+    "prompt": 2,
+    "rag": 2,
+    "embedding": 2,
+    "inference": 2,
+    "model": 1,
+    "openai": 2,
+    "anthropic": 3,
+    "test": 3,
+    "testing": 3,
+    "tdd": 3,
+    "e2e": 2,
+    "playwright": 2,
+    "vitest": 2,
+    "coverage": 2,
+    "typescript": 2,
+    "javascript": 1,
+    "react": 1,
+    "astro": 2,
+    "node": 1,
+    "bun": 2,
+    "postgres": 2,
+    "sqlite": 2,
+    "docker": 2,
+    "ci": 1,
+    "devtools": 2,
+    "developer": 2,
+    "security": 2,
+    "benchmark": 2,
+    "eval": 3,
+    "mcp": 3,
+    "open source": 1
   },
-  "blocklist": ["stock", "lawsuit", "funding round", "valuation", "layoff", "ipo", "crypto", "nft"]
+  "blocklist": [
+    "stock",
+    "lawsuit",
+    "funding round",
+    "valuation",
+    "layoff",
+    "ipo",
+    "crypto",
+    "nft"
+  ]
 }
