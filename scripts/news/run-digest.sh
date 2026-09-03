@@ -71,14 +71,38 @@ fi
 # A dead Ollama and a quiet news week both end in "no post today"; the digest
 # script separates them by exit code, and this log keeps that distinction.
 log "START node=$NODE_BIN"
-OUT="$("$NODE_BIN" "$REPO/scripts/news/fetch-news.mjs" 2>&1)"
-STATUS=$?
+
+# Cron kills nothing, so without a wall clock a wedged Ollama leaves this job
+# running forever and the log holds only START. Measured 2026-09-03: the
+# llama3.2:3b runner sat idle at 0.0% CPU while every generate call hung, and a
+# 15-minute run produced no RESULT line at all.
+#
+# That is the expensive part. The rule for reading this log was "no line at all
+# means the job never ran" — a hang produces exactly the same evidence, so the
+# two states were indistinguishable. A budget makes the hang say so.
+#
+# The real run takes ~52s with 36 feeds. 900s is ~17x that: generous enough that
+# a slow week never trips it, short enough that Monday's failure is visible
+# Monday.
+TIMEOUT_S="${NEWS_RUN_TIMEOUT_S:-900}"
+TIMEOUT_BIN="$(command -v timeout || true)"
+if [ -n "$TIMEOUT_BIN" ]; then
+  OUT="$("$TIMEOUT_BIN" "$TIMEOUT_S" "$NODE_BIN" "$REPO/scripts/news/fetch-news.mjs" 2>&1)"
+  STATUS=$?
+else
+  # Never fail closed on a missing coreutils binary: no timeout is worse than
+  # the old behaviour only if it also stops the digest from running at all.
+  log "WARN: no timeout(1) on PATH — running without a wall clock; a hang will not be reported"
+  OUT="$("$NODE_BIN" "$REPO/scripts/news/fetch-news.mjs" 2>&1)"
+  STATUS=$?
+fi
 printf '%s\n' "$OUT" >>"$LOG"
 
 case "$STATUS" in
   0) log "RESULT=ok — drafts written, review them with: git -C $REPO status" ;;
   1) log "RESULT=nothing-produced — feeds were reachable; either nothing cleared the filters or the target files already existed. The [news] lines above say which." ;;
   2) log "RESULT=BROKEN — instrument fault (network, Ollama, or config). Not a quiet news day." ;;
+  124) log "RESULT=timeout — killed after ${TIMEOUT_S}s without finishing. Ollama is the usual cause: the runner can wedge while /api/tags still answers. Check with a REAL generate call, then \`ollama stop\` the model. Raise NEWS_RUN_TIMEOUT_S if the digest legitimately needs longer." ;;
   *) log "RESULT=unexpected exit $STATUS" ;;
 esac
 log "END status=$STATUS"

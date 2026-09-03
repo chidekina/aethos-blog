@@ -240,6 +240,48 @@ OUT13D="$(run "$T/c13d.json" "$T/seen13d.json" "$T/posts13d" --dry-run)"; ST13D=
 [ "$ST13D" = 0 ] && ok "control: valid numeric knobs still run" || bad "control: valid knobs run" "got $ST13D — validator rejects everything: ARM 13 proves nothing"
 N13D="$(grep -c 'example.test/L' <<<"$OUT13D")"
 [ "$N13D" = 2 ] && ok "control: the valid cap is still applied (2)" || bad "control: valid cap applied" "got $N13D"
+echo "ARM 14 — a wedged runner is caught: the catalogue answering is not generation working"
+# Measured 2026-09-03: llama3.2:3b's runner sat at 0.0% CPU for 51 minutes while
+# every /api/generate timed out at 600s — and /api/tags answered in under a
+# second throughout, so the liveness check passed and the digest hung forever.
+# Same false-green as pg_isready proving *a* postgres listens rather than yours.
+OPORT=$(( 20000 + RANDOM % 20000 ))
+node -e '
+const http=require("http");
+http.createServer((q,r)=>{
+  if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
+  // /api/generate: accept the request and never answer — a wedged runner
+}).listen(process.argv[1]);
+' "$OPORT" &
+OSRV_PID=$!
+for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OPORT/api/tags" >/dev/null && break; done
+
+OUT14="$(OLLAMA_URL="http://127.0.0.1:$OPORT" NEWS_PROBE_TIMEOUT_MS=2000 \
+  run "$T/c1.json" "$T/seen14.json" "$T/posts14")"; ST14=$?
+kill "$OSRV_PID" 2>/dev/null
+[ "$ST14" = 2 ] && ok "catalogue-ok / generation-wedged -> exit 2" || bad "wedged runner -> exit 2" "got $ST14: $OUT14"
+has "$OUT14" "wedged" && ok "the log names the wedge and how to clear it" || bad "log names the wedge" "$OUT14"
+[ -d "$T/posts14" ] && bad "no drafts written when generation is wedged" "posts dir exists" || ok "no drafts written when generation is wedged"
+
+# negative control: a server answering BOTH endpoints must pass the probe, or a
+# check that always failed would satisfy all three assertions above.
+OPORT2=$(( 20000 + RANDOM % 20000 ))
+node -e '
+const http=require("http");
+http.createServer((q,r)=>{
+  r.writeHead(200,{"content-type":"application/json"});
+  if(q.url==="/api/tags") return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));
+  r.end(JSON.stringify({response:"a summary sentence"}));
+}).listen(process.argv[1]);
+' "$OPORT2" &
+OSRV2_PID=$!
+for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OPORT2/api/tags" >/dev/null && break; done
+OUT14B="$(OLLAMA_URL="http://127.0.0.1:$OPORT2" NEWS_PROBE_TIMEOUT_MS=5000 \
+  run "$T/c1.json" "$T/seen14b.json" "$T/posts14b")"; ST14B=$?
+kill "$OSRV2_PID" 2>/dev/null
+[ "$ST14B" = 0 ] && ok "control: a responsive server passes the probe" || bad "control: responsive server passes" "got $ST14B — probe fails everything: ARM 14 proves nothing: $OUT14B"
+[ -d "$T/posts14b" ] && ok "control: drafts ARE written when generation works" || bad "control: drafts written" "probe blocked a healthy run"
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
