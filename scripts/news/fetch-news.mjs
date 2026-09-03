@@ -69,6 +69,28 @@ if (!Array.isArray(cfg.sources) || cfg.sources.length === 0) {
   die(2, 'INSTRUMENT: sources.json has no sources — a scan over zero feeds is not a quiet news day');
 }
 
+// A malformed numeric knob must not read as "no limit". `Number("three")` is NaN
+// and `n >= NaN` is ALWAYS false, so a typo in maxPerDigest silently removes the
+// per-source cap — precisely the firehose this cap exists to stop, arriving as a
+// config typo nobody would look for. Same for timeoutMs, where NaN aborts the
+// fetch instantly and reads as a dead feed. Refuse instead of guessing: falling
+// back to the default would hide the typo forever.
+function posInt(value, where) {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+    die(2, `INSTRUMENT: ${where} must be a positive integer, got ${JSON.stringify(value)}. ` +
+           `A non-numeric cap becomes NaN, and every comparison against NaN is false — ` +
+           `the limit would silently vanish rather than fail.`);
+  }
+  return n;
+}
+posInt(cfg.maxPerSource, 'maxPerSource');
+for (const s of cfg.sources) {
+  posInt(s.maxPerDigest, `maxPerDigest on source "${s.name}"`);
+  posInt(s.timeoutMs, `timeoutMs on source "${s.name}"`);
+}
+
 const seen = existsSync(SEEN_PATH) ? JSON.parse(readFileSync(SEEN_PATH, 'utf8')) : { links: [] };
 const seenSet = new Set(seen.links);
 
@@ -328,6 +350,7 @@ let undatedUsed = 0;
 // limit is now per-source, so a high-volume community feed can be admitted at
 // 1 without being weighted down into never appearing at all.
 const capFor = (src) => {
+  // Values were validated as positive integers at startup, so no NaN can reach here.
   const own = cfg.sources.find((s) => s.name === src)?.maxPerDigest;
   return Number(own ?? cfg.maxPerSource ?? 3);
 };

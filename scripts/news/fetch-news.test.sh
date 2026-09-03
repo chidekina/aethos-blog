@@ -210,6 +210,36 @@ cfg "$T/c12b.json" "[{\"name\":\"Slow\",\"url\":\"http://127.0.0.1:$PORT/slow\",
 OUT12B="$(NEWS_FETCH_TIMEOUT_MS=300 run "$T/c12b.json" "$T/seen12b.json" "$T/posts12b" --check-sources)"; ST12B=$?
 [ "$ST12B" = 0 ] && ok "per-source timeoutMs overrides the shared default" || bad "timeoutMs override" "got $ST12B: $OUT12B"
 has "$OUT12B" "1/1 feeds reachable" && ok "the same slow feed is reachable with its own budget" || bad "slow feed reachable" "$OUT12B"
+echo "ARM 13 — a malformed numeric knob is exit 2, never an absent limit"
+# Found in review of PR #10: Number("three") is NaN and `n >= NaN` is always
+# false, so a typo'd cap silently admitted EVERY item from that source — the
+# exact firehose the cap exists to stop, arriving as a config typo.
+cfg "$T/c13.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3,\"maxPerDigest\":\"three\"}]"
+OUT13="$(run "$T/c13.json" "$T/seen13.json" "$T/posts13" --dry-run)"; ST13=$?
+[ "$ST13" = 2 ] && ok "non-numeric maxPerDigest -> exit 2" || bad "non-numeric maxPerDigest -> exit 2" "got $ST13: $OUT13"
+has "$OUT13" "INSTRUMENT" && ok "malformed knob names itself an instrument fault" || bad "malformed knob names itself" "$OUT13"
+# the regression assertion: it must not have silently admitted everything
+N13="$(grep -c 'example.test/L' <<<"$OUT13")"
+[ "$N13" = 0 ] && ok "malformed cap admits nothing (no silent firehose)" || bad "malformed cap leaked items" "got $N13 items through a NaN cap"
+
+cfg "$T/c13b.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3,\"timeoutMs\":\"soon\"}]"
+OUT13B="$(run "$T/c13b.json" "$T/seen13b.json" "$T/posts13b" --dry-run)"; ST13B=$?
+[ "$ST13B" = 2 ] && ok "non-numeric timeoutMs -> exit 2" || bad "non-numeric timeoutMs -> exit 2" "got $ST13B: $OUT13B"
+
+cfg "$T/c13c.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3}]"
+python3 - "$T/c13c.json" <<'PYEOF'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['maxPerSource']=0; json.dump(d,open(p,'w'))
+PYEOF
+OUT13C="$(run "$T/c13c.json" "$T/seen13c.json" "$T/posts13c" --dry-run)"; ST13C=$?
+[ "$ST13C" = 2 ] && ok "maxPerSource: 0 is refused, not read as 'block everything'" || bad "zero cap refused" "got $ST13C"
+# negative control: valid values must STILL run, or a validator that rejected
+# everything would pass all five assertions above.
+cfg "$T/c13d.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3,\"maxPerDigest\":2,\"timeoutMs\":8000}]"
+OUT13D="$(run "$T/c13d.json" "$T/seen13d.json" "$T/posts13d" --dry-run)"; ST13D=$?
+[ "$ST13D" = 0 ] && ok "control: valid numeric knobs still run" || bad "control: valid knobs run" "got $ST13D — validator rejects everything: ARM 13 proves nothing"
+N13D="$(grep -c 'example.test/L' <<<"$OUT13D")"
+[ "$N13D" = 2 ] && ok "control: the valid cap is still applied (2)" || bad "control: valid cap applied" "got $N13D"
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
