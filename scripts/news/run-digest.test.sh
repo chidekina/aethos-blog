@@ -103,6 +103,37 @@ has "$OUT6" "$REPO/scripts/news/fetch-news.mjs" \
   && bad "does not reach back into the original repo" "hardcoded path still in play" \
   || ok "does not reach back into the original repo"
 
+echo "ARM 7 — a hang is killed and SAYS so; it is not silence"
+# Measured 2026-09-03: Ollama's runner wedged, a 15-minute run wrote only START,
+# and no RESULT line ever appeared. The rule for reading this log was "no line at
+# all means the job never ran" — so a hang and a job that never fired produced
+# identical evidence. This arm exists to keep those two states distinguishable.
+HANG="$T/hang"
+mkdir -p "$HANG/scripts/news"
+cp "$SCRIPT" "$HANG/scripts/news/"
+printf '#!/usr/bin/env node\nsetTimeout(()=>{},60000);\n' > "$HANG/scripts/news/fetch-news.mjs"
+LOG7="$T/hang.log"
+env -i HOME="$HOME" PATH=/usr/bin:/bin SHELL=/bin/sh NEWS_DIGEST_LOG="$LOG7" NEWS_RUN_TIMEOUT_S=3 \
+    /bin/sh -c "$HANG/scripts/news/run-digest.sh" >/dev/null 2>&1
+ST7=$?
+OUT7="$(cat "$LOG7" 2>/dev/null)"
+[ "$ST7" = 124 ] && ok "a hanging digest exits 124" || bad "hanging digest exits 124" "got $ST7"
+has "$OUT7" "RESULT=timeout" && ok "the timeout is NAMED in the log, not silent" || bad "RESULT=timeout in log" "$OUT7"
+has "$OUT7" "START" && ok "START is still logged (the hang is visible as a pair)" || bad "START logged" "$OUT7"
+# negative control: a NORMAL run must not be killed, or a wrapper that timed out
+# on everything would satisfy all three assertions above.
+FAST="$T/fast"
+mkdir -p "$FAST/scripts/news"
+cp "$SCRIPT" "$FAST/scripts/news/"
+printf '#!/usr/bin/env node\nconsole.log("[news] DIGEST_OK items=1 files=2");\n' > "$FAST/scripts/news/fetch-news.mjs"
+LOG7B="$T/fast.log"
+env -i HOME="$HOME" PATH=/usr/bin:/bin SHELL=/bin/sh NEWS_DIGEST_LOG="$LOG7B" NEWS_RUN_TIMEOUT_S=30 \
+    /bin/sh -c "$FAST/scripts/news/run-digest.sh" >/dev/null 2>&1
+ST7B=$?
+OUT7B="$(cat "$LOG7B" 2>/dev/null)"
+[ "$ST7B" = 0 ] && ok "control: a fast run is NOT killed" || bad "control: fast run not killed" "got $ST7B — wrapper kills everything: ARM 7 proves nothing"
+has "$OUT7B" "RESULT=ok" && ok "control: a fast run still reports RESULT=ok" || bad "control: fast run RESULT=ok" "$OUT7B"
+has "$OUT7B" "RESULT=timeout" && bad "control: fast run must not claim timeout" "timeout reported for a run that finished" || ok "control: fast run does not claim timeout"
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

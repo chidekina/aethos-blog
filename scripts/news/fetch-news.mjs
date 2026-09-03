@@ -32,6 +32,9 @@ const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2:3b';
 const FETCH_TIMEOUT_MS = Number(process.env.NEWS_FETCH_TIMEOUT_MS ?? 20000);
 const LLM_TIMEOUT_MS = Number(process.env.NEWS_LLM_TIMEOUT_MS ?? 120000);
+// Budget for the liveness probe only. Generation of a single token on a warm
+// runner is ~1s here; a wedged one never answers at all, so this can be short.
+const PROBE_TIMEOUT_MS = Number(process.env.NEWS_PROBE_TIMEOUT_MS ?? 30000);
 
 const argv = process.argv.slice(2);
 // An unknown flag is a BROKEN INSTRUMENT, not a no-op. Measured 2026-09-02: a
@@ -192,6 +195,36 @@ async function ollamaAlive() {
     const names = (body.models ?? []).map((m) => m.name);
     if (!names.includes(OLLAMA_MODEL)) {
       return { ok: false, reason: `model ${OLLAMA_MODEL} not pulled (have: ${names.join(', ') || 'none'})` };
+    }
+    // The catalogue answering is NOT the model generating. Measured 2026-09-03:
+    // the llama3.2:3b runner sat at 0.0% CPU for 51 minutes while every
+    // /api/generate timed out at 600s, cold and warm alike — and /api/tags
+    // answered in under a second the whole time, so this function returned ok
+    // and the digest went on to hang forever. Same false-green as `pg_isready`
+    // proving *a* postgres listens rather than yours.
+    //
+    // So probe the path we actually use, with a tiny prompt and a short budget.
+    const gctl = new AbortController();
+    const gt = setTimeout(() => gctl.abort(), PROBE_TIMEOUT_MS);
+    try {
+      const gres = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        signal: gctl.signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: OLLAMA_MODEL, prompt: 'ok', stream: false, options: { num_predict: 1 } }),
+      });
+      if (!gres.ok) return { ok: false, reason: `generate probe HTTP ${gres.status}` };
+      await gres.json();
+    } catch (err) {
+      return {
+        ok: false,
+        reason: err.name === 'AbortError'
+          ? `catalogue answers but generation did not respond within ${PROBE_TIMEOUT_MS}ms — ` +
+            `the runner is wedged. Clear it with \`ollama stop ${OLLAMA_MODEL}\`.`
+          : `generate probe failed — ${err.message}`,
+      };
+    } finally {
+      clearTimeout(gt);
     }
     return { ok: true };
   } catch (err) {
