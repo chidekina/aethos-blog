@@ -34,6 +34,23 @@ const FETCH_TIMEOUT_MS = Number(process.env.NEWS_FETCH_TIMEOUT_MS ?? 20000);
 const LLM_TIMEOUT_MS = Number(process.env.NEWS_LLM_TIMEOUT_MS ?? 120000);
 
 const argv = process.argv.slice(2);
+// An unknown flag is a BROKEN INSTRUMENT, not a no-op. Measured 2026-09-02: a
+// verification run passed `--config <candidates.json>`, which this script never
+// read — the knob is the NEWS_CONFIG env var. The run silently probed the live
+// sources.json instead and reported a clean sweep, so 38 candidate feeds were
+// "confirmed" without ever being fetched. A flag that is ignored produces a
+// confident answer about the wrong input, which is worse than an error.
+const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm']);
+const unknownFlags = argv.filter((a) => !KNOWN_FLAGS.has(a));
+if (unknownFlags.length > 0) {
+  console.error(
+    `[news] INSTRUMENT: unknown argument(s) ${unknownFlags.join(' ')} — known flags are ` +
+    `${[...KNOWN_FLAGS].join(' ')}. Paths are set through env vars, not flags ` +
+    `(NEWS_CONFIG, NEWS_SEEN, NEWS_POSTS_DIR). Refusing to run rather than silently ` +
+    `ignoring an argument and answering about the wrong input.`
+  );
+  process.exit(2);
+}
 const dryRun = argv.includes('--dry-run');
 const checkSources = argv.includes('--check-sources');
 const noLlm = argv.includes('--no-llm');
@@ -52,6 +69,28 @@ if (!Array.isArray(cfg.sources) || cfg.sources.length === 0) {
   die(2, 'INSTRUMENT: sources.json has no sources — a scan over zero feeds is not a quiet news day');
 }
 
+// A malformed numeric knob must not read as "no limit". `Number("three")` is NaN
+// and `n >= NaN` is ALWAYS false, so a typo in maxPerDigest silently removes the
+// per-source cap — precisely the firehose this cap exists to stop, arriving as a
+// config typo nobody would look for. Same for timeoutMs, where NaN aborts the
+// fetch instantly and reads as a dead feed. Refuse instead of guessing: falling
+// back to the default would hide the typo forever.
+function posInt(value, where) {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+    die(2, `INSTRUMENT: ${where} must be a positive integer, got ${JSON.stringify(value)}. ` +
+           `A non-numeric cap becomes NaN, and every comparison against NaN is false — ` +
+           `the limit would silently vanish rather than fail.`);
+  }
+  return n;
+}
+posInt(cfg.maxPerSource, 'maxPerSource');
+for (const s of cfg.sources) {
+  posInt(s.maxPerDigest, `maxPerDigest on source "${s.name}"`);
+  posInt(s.timeoutMs, `timeoutMs on source "${s.name}"`);
+}
+
 const seen = existsSync(SEEN_PATH) ? JSON.parse(readFileSync(SEEN_PATH, 'utf8')) : { links: [] };
 const seenSet = new Set(seen.links);
 
@@ -59,8 +98,13 @@ const seenSet = new Set(seen.links);
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
 
 async function fetchFeed(src) {
+  // Per-source override. Measured 2026-09-02: satisfice.com answers in >20s but
+  // well under 60s. At the shared default it fails every run, and a slow feed
+  // logs identically to a dead one — so the digest would lose it silently
+  // rather than wait the extra seconds once a week.
+  const timeoutMs = Number(src.timeoutMs ?? FETCH_TIMEOUT_MS);
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const res = await fetch(src.url, {
       signal: ctl.signal,
@@ -69,7 +113,7 @@ async function fetchFeed(src) {
     if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
     return { ok: true, xml: await res.text() };
   } catch (err) {
-    return { ok: false, reason: err.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : err.message };
+    return { ok: false, reason: err.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err.message };
   } finally {
     clearTimeout(timer);
   }
@@ -300,9 +344,19 @@ const scored = pool
 const perSource = new Map();
 const shortlist = [];
 let undatedUsed = 0;
+// The cap was hardcoded at 3. `weight` biases an item's SCORE, so a firehose
+// still reached a third of an 8-item digest on volume alone — TabNews alone
+// posts ~400-600 items/month against ~1/month from several others here. The
+// limit is now per-source, so a high-volume community feed can be admitted at
+// 1 without being weighted down into never appearing at all.
+const capFor = (src) => {
+  // Values were validated as positive integers at startup, so no NaN can reach here.
+  const own = cfg.sources.find((s) => s.name === src)?.maxPerDigest;
+  return Number(own ?? cfg.maxPerSource ?? 3);
+};
 for (const it of scored) {
   const n = perSource.get(it.source) ?? 0;
-  if (n >= 3) continue;
+  if (n >= capFor(it.source)) continue;
   if (!dated(it)) {
     if (undatedUsed >= (cfg.maxUndated ?? 2)) continue;
     undatedUsed++;

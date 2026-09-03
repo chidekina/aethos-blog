@@ -10,9 +10,11 @@ answers `curl` is not the same as a feed this pipeline can read.
 NEWS_CONFIG=/path/to/candidates.json node scripts/news/fetch-news.mjs --check-sources
 ```
 
-🔴 The flag is `NEWS_CONFIG` (env var). Passing `--config` is **silently ignored**
-and the prober reads the live `sources.json` instead — the first verification run
-here did exactly that and "confirmed" nine feeds that were never under test.
+🔴 The knob is `NEWS_CONFIG` (env var). Passing `--config` **used to be silently
+ignored**, and the prober read the live `sources.json` instead — the first
+verification run here did exactly that and "confirmed" nine feeds that were never
+under test. Since 2026-09-03 an unknown argument exits **2** with a message
+naming the env vars, so that failure cannot recur silently.
 
 🔴 Every probe run carries a **negative control**: a URL that must 404. Without it
 a clean sweep is indistinguishable from a prober pointed at the wrong file.
@@ -64,18 +66,23 @@ a clean sweep is indistinguishable from a prober pointed at the wrong file.
 
 ## Caveats that must survive into any change
 
-🔴 **James Bach timed out at the pipeline's default `NEWS_FETCH_TIMEOUT_MS=20000`
-and succeeded at 60000.** Adding it without raising the timeout adds a feed that
-fails every run. A slow feed and a dead feed produce the same log line.
+✅ **James Bach is now in `sources.json` with `timeoutMs: 60000`.** It times out
+at the shared default of 20000 and answers well inside 60s. A source may raise
+its own budget; a slow feed and a dead feed otherwise produce the same log line.
 
 🔴 **No first-party Anthropic feed exists.** `anthropic.com/rss.xml` 404s. The
 mirror above is a third-party scraper we do not control; two other community
 mirrors were checked and are stale by 5 and 9 months. The honest alternative is
 scraping `anthropic.com/engineering` ourselves.
 
-🔴 **TabNews out-posts everything else combined by roughly 100:1.** `weight`
-biases the score; it does not cap intake. Adding TabNews without a per-source
-item cap means the digest becomes TabNews.
+✅ **TabNews is now in `sources.json` with `maxPerDigest: 1`.** A per-source cap
+always existed but was hardcoded at 3 — so a firehose could still take three of
+an eight-item digest on volume alone. The cap is now `maxPerSource` globally
+(default 3) with a per-source `maxPerDigest` override.
+
+🔴 An earlier note here said intake was uncapped entirely. That was wrong: the
+hardcoded 3 was there from the start. The defect was that it could not be
+lowered, not that it was absent.
 
 🔴 **Brazilian corporate engineering blogs are dead as a category.** 18 were
 opened; exactly one (Creditas) is PT-BR and posted within six months. iFood

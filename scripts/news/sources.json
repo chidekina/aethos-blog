@@ -209,6 +209,20 @@
       "url": "https://www.hipsters.tech/feed/",
       "tag": "br",
       "weight": 3
+    },
+    {
+      "name": "TabNews",
+      "url": "https://www.tabnews.com.br/recentes/rss",
+      "tag": "br",
+      "weight": 2,
+      "maxPerDigest": 1
+    },
+    {
+      "name": "James Bach",
+      "url": "https://www.satisfice.com/blog/feed",
+      "tag": "testing",
+      "weight": 2,
+      "timeoutMs": 60000
     }
   ],
   "keywords": {
@@ -260,5 +274,8 @@
     "ipo",
     "crypto",
     "nft"
-  ]
+  ],
+  "_maxPerSource": "at most this many items from one feed reach a digest; a source may lower it with its own `maxPerDigest`",
+  "maxPerSource": 3,
+  "_timeoutMs": "a source may override the NEWS_FETCH_TIMEOUT_MS default with `timeoutMs` when it is provably slow but alive"
 }
