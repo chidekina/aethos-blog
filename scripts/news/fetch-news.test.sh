@@ -52,6 +52,8 @@ const http=require("http"),fs=require("fs"),p=process.argv[1];
 http.createServer((q,r)=>{
   const f=p+"/"+q.url.replace(/^\//,"").replace(/[^a-z0-9._-]/gi,"");
   if(q.url==="/dead"){r.writeHead(500);return r.end("boom");}
+  if(q.url==="/slow"){return setTimeout(()=>{r.writeHead(200,{"content-type":"application/xml"});
+    r.end(fs.readFileSync(p+"/good.xml"));},1500);}
   try{r.writeHead(200,{"content-type":"application/xml"});r.end(fs.readFileSync(f));}
   catch{r.writeHead(404);r.end("nope");}
 }).listen(process.argv[2]);
@@ -151,6 +153,63 @@ N9="$(grep -c 'example.test/n' <<<"$OUT9")"
 # dropped every undated item would pass the assertion above just as well.
 [ "$N9" -gt 0 ] && ok "control: undated items are still included, not dropped" || bad "control: undated still included" "cap became a ban"
 
+echo "ARM 10 — an unknown argument is exit 2, and known flags still work"
+# Closes: `--config <file>` was silently ignored, so a verification run probed
+# the live sources.json and reported a clean sweep for candidates it never
+# fetched. An ignored flag answers confidently about the wrong input.
+OUT10="$(run "$T/c1.json" "$T/seen10.json" "$T/posts10" --config /tmp/whatever.json)"; ST10=$?
+[ "$ST10" = 2 ] && ok "unknown flag -> exit 2" || bad "unknown flag -> exit 2" "got $ST10: $OUT10"
+has "$OUT10" "INSTRUMENT" && ok "unknown flag names itself an instrument fault" || bad "unknown flag names itself" "$OUT10"
+has "$OUT10" "NEWS_CONFIG" && ok "error names the env var that actually works" || bad "error names NEWS_CONFIG" "$OUT10"
+# negative control: without it, a script exiting 2 on EVERY invocation passes all three above.
+OUT10B="$(run "$T/c1.json" "$T/seen10b.json" "$T/posts10b" --dry-run)"; ST10B=$?
+[ "$ST10B" = 0 ] && ok "control: a KNOWN flag is still accepted" || bad "control: known flag accepted" "got $ST10B — guard rejects everything: ARM 10 proves nothing"
+
+echo "ARM 11 — per-source cap is configurable, and a source may lower its own"
+cat > "$T/feeds/loud.xml" <<XML
+<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>LLM agent testing L1</title><link>https://example.test/L1</link><pubDate>$NOW</pubDate><description>agent testing tdd coverage</description></item>
+<item><title>LLM agent testing L2</title><link>https://example.test/L2</link><pubDate>$NOW</pubDate><description>agent testing tdd coverage</description></item>
+<item><title>LLM agent testing L3</title><link>https://example.test/L3</link><pubDate>$NOW</pubDate><description>agent testing tdd coverage</description></item>
+<item><title>LLM agent testing L4</title><link>https://example.test/L4</link><pubDate>$NOW</pubDate><description>agent testing tdd coverage</description></item>
+<item><title>LLM agent testing L5</title><link>https://example.test/L5</link><pubDate>$NOW</pubDate><description>agent testing tdd coverage</description></item>
+</channel></rss>
+XML
+cfg "$T/c11.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3}]"
+OUT11="$(run "$T/c11.json" "$T/seen11.json" "$T/posts11" --dry-run)"
+N11="$(grep -c 'example.test/L' <<<"$OUT11")"
+[ "$N11" = 3 ] && ok "default cap admits 3 of 5 from one source" || bad "default cap" "got $N11 of 5"
+
+cfg "$T/c11b.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3,\"maxPerDigest\":1}]"
+OUT11B="$(run "$T/c11b.json" "$T/seen11b.json" "$T/posts11b" --dry-run)"
+N11B="$(grep -c 'example.test/L' <<<"$OUT11B")"
+[ "$N11B" = 1 ] && ok "maxPerDigest:1 lowers that source to 1" || bad "maxPerDigest override" "got $N11B, want 1"
+# negative control: a script ignoring maxPerDigest gives 3 here; one that dropped
+# the source gives 0. Both wrong, in opposite directions.
+[ "$N11B" -gt 0 ] && ok "control: capped source still contributes, not banned" || bad "control: cap became a ban" "source vanished"
+
+cfg "$T/c11c.json" "[{\"name\":\"Loud\",\"url\":\"http://127.0.0.1:$PORT/loud.xml\",\"tag\":\"ai\",\"weight\":3}]"
+python3 - "$T/c11c.json" <<'PYEOF'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['maxPerSource']=2; json.dump(d,open(p,'w'))
+PYEOF
+OUT11C="$(run "$T/c11c.json" "$T/seen11c.json" "$T/posts11c" --dry-run)"
+N11C="$(grep -c 'example.test/L' <<<"$OUT11C")"
+[ "$N11C" = 2 ] && ok "global maxPerSource is honoured (2)" || bad "global maxPerSource" "got $N11C, want 2"
+
+echo "ARM 12 — a source may raise its own fetch timeout"
+# /slow stalls ~1.5s. At a 300ms budget it must fail; the SAME feed with its own
+# timeoutMs must succeed. Without the failing end, a script ignoring timeoutMs
+# passes the success case anyway.
+cfg "$T/c12.json" "[{\"name\":\"Slow\",\"url\":\"http://127.0.0.1:$PORT/slow\",\"tag\":\"ai\",\"weight\":3}]"
+OUT12="$(NEWS_FETCH_TIMEOUT_MS=300 run "$T/c12.json" "$T/seen12.json" "$T/posts12" --check-sources)"; ST12=$?
+has "$OUT12" "timeout after 300ms" && ok "slow feed times out at the shared default" || bad "slow feed times out" "$OUT12"
+[ "$ST12" = 2 ] && ok "only feed timing out is an instrument fault" || bad "timeout -> exit 2" "got $ST12"
+
+cfg "$T/c12b.json" "[{\"name\":\"Slow\",\"url\":\"http://127.0.0.1:$PORT/slow\",\"tag\":\"ai\",\"weight\":3,\"timeoutMs\":8000}]"
+OUT12B="$(NEWS_FETCH_TIMEOUT_MS=300 run "$T/c12b.json" "$T/seen12b.json" "$T/posts12b" --check-sources)"; ST12B=$?
+[ "$ST12B" = 0 ] && ok "per-source timeoutMs overrides the shared default" || bad "timeoutMs override" "got $ST12B: $OUT12B"
+has "$OUT12B" "1/1 feeds reachable" && ok "the same slow feed is reachable with its own budget" || bad "slow feed reachable" "$OUT12B"
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
