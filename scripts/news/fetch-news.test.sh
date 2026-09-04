@@ -267,7 +267,19 @@ OUT14="$(OLLAMA_URL="http://127.0.0.1:$OPORT" NEWS_PROBE_TIMEOUT_MS=2000 \
   run "$T/c1.json" "$T/seen14.json" "$T/posts14")"; ST14=$?
 kill "$OSRV_PID" 2>/dev/null
 [ "$ST14" = 2 ] && ok "catalogue-ok / generation-wedged -> exit 2" || bad "wedged runner -> exit 2" "got $ST14: $OUT14"
-has "$OUT14" "wedged" && ok "the log names the wedge and how to clear it" || bad "log names the wedge" "$OUT14"
+has "$OUT14" "generation did not respond within" \
+  && ok "the log reports the generation probe failing, which is what it observed" \
+  || bad "log reports the probe failure" "$OUT14"
+# 🔴 This stub answers /api/tags and nothing else, so /api/ps does not answer
+# either. The message must say so instead of converting an unreadable reader
+# into an empty subject. Before 2026-09-04 it printed "Nothing is reported
+# loaded, so this looks like a genuinely wedged runner" — a cause asserted from
+# a timeout it never distinguished from an empty list.
+has "$OUT14" "could NOT be read" \
+  && ok "and names /api/ps as unreadable rather than as empty" || bad "unreadable ps reported as empty" "$OUT14"
+has "$OUT14" "genuinely wedged" \
+  && bad "it still asserts a cause the data cannot support" "$OUT14" \
+  || ok "and asserts no cause the data cannot support"
 [ -d "$T/posts14" ] && bad "no drafts written when generation is wedged" "posts dir exists" || ok "no drafts written when generation is wedged"
 
 # negative control: a server answering BOTH endpoints must pass the probe, or a
@@ -386,6 +398,43 @@ kill "$P16B" 2>/dev/null
 has "$OUT16B" "wedged rather than blocked" \
   && ok "only-ours-loaded flips the advice back to stopping ours" || bad "advice did not adapt" "$OUT16B"
 has "$OUT16B" "nomic" && bad "it named a model that is not loaded" "$OUT16B" || ok "and it invents no blocker that is not there"
+
+echo "ARM 17 - an EMPTY /api/ps names both hypotheses and picks neither"
+# The third reading of /api/ps, and the one that produced RESULT=BROKEN on the
+# 2026-09-04 cron rehearsal: the endpoint answers 200 with an empty list. A load
+# queued waiting for a slot is invisible there BY CONSTRUCTION, so this reading
+# is produced both by a genuinely wedged runner and by a card that was held and
+# released. Naming one is a guess; the old code named the one whose fix cannot
+# work.
+OP17=$(( 20000 + RANDOM % 20000 ))
+node -e '
+const http=require("http");
+http.createServer((q,r)=>{
+  if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
+  if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[]}));}
+  // /api/generate: accept and never answer
+}).listen(process.argv[1]);
+' "$OP17" &
+P17=$!
+for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP17/api/tags" >/dev/null && break; done
+OUT17="$(OLLAMA_URL="http://127.0.0.1:$OP17" NEWS_PROBE_TIMEOUT_MS=2000 \
+  run "$T/c1.json" "$T/seen17.json" "$T/posts17")"; ST17=$?
+kill "$P17" 2>/dev/null
+[ "$ST17" = 2 ] && ok "an empty ps is still exit 2" || bad "empty ps exit $ST17" "$OUT17"
+has "$OUT17" "does not identify the cause" \
+  && ok "the log says plainly that the reading identifies no cause" || bad "it still picks a cause" "$OUT17"
+has "$OUT17" "invisible there by construction" \
+  && ok "and names WHY the reading is ambiguous, not just that it is" || bad "ambiguity asserted without its mechanism" "$OUT17"
+has "$OUT17" "ollama stop llama3.2:3b" \
+  && bad "it still sends the operator to stop the model that stopping cannot help" "$OUT17" \
+  || ok "and does not prescribe the fix that measurement refuted"
+# Both ends. An empty ps and an UNREADABLE ps must not render identically —
+# otherwise the queried/empty split this arm exists for buys nothing.
+has "$OUT17" "could NOT be read" \
+  && bad "empty ps and unreadable ps render the same" "$OUT17" \
+  || ok "control: an empty ps reads differently from an unreadable one"
 
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
