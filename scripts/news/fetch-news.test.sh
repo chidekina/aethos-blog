@@ -71,7 +71,13 @@ JSON
 }
 
 run() { # env-isolated invocation of the real script
-  NEWS_CONFIG="$1" NEWS_SEEN="$2" NEWS_POSTS_DIR="$3" \
+  # NEWS_EDITIONS_DIR is redirected for the same reason NEWS_SEEN is: without it
+  # this suite writes a fixture edition record into the tracked production
+  # directory on every run. Measured 2026-09-04 — the first run of the new
+  # record writer left scripts/news/editions/2026-09-04.json in the tree,
+  # carrying example.test links. A suite's side effects are invisible to the
+  # suite by construction; only an outside `git status` shows them.
+  NEWS_CONFIG="$1" NEWS_SEEN="$2" NEWS_POSTS_DIR="$3" NEWS_EDITIONS_DIR="$T/editions" \
     node "$SCRIPT" "${@:4}" 2>&1
 }
 
@@ -282,6 +288,41 @@ OUT14B="$(OLLAMA_URL="http://127.0.0.1:$OPORT2" NEWS_PROBE_TIMEOUT_MS=5000 \
 kill "$OSRV2_PID" 2>/dev/null
 [ "$ST14B" = 0 ] && ok "control: a responsive server passes the probe" || bad "control: responsive server passes" "got $ST14B — probe fails everything: ARM 14 proves nothing: $OUT14B"
 [ -d "$T/posts14b" ] && ok "control: drafts ARE written when generation works" || bad "control: drafts written" "probe blocked a healthy run"
+echo "ARM 15 — the edition record is written, and the entity check actually runs"
+# DIGEST-EVAL item 2. The draft half of the eval pair has to be captured on
+# purpose; edition 1 was recoverable only by git archaeology and only by luck.
+E15="$T/ed15"
+OUT15="$(NEWS_EDITIONS_DIR="$E15" NEWS_CONFIG="$T/c1.json" NEWS_SEEN="$T/seen15.json" \
+  NEWS_POSTS_DIR="$T/posts15" node "$SCRIPT" --no-llm 2>&1)"
+REC15="$(command ls "$E15"/*.json 2>/dev/null | head -1)"
+[ -n "$REC15" ] && ok "a record lands in NEWS_EDITIONS_DIR" || bad "no edition record written" "$OUT15"
+if [ -n "$REC15" ]; then
+  # The record must carry the SOURCE text, not only the summaries: without the
+  # ground the pair is unusable as an eval set, which is the whole point of it.
+  node -e '
+    const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const it=r.items[0]||{};
+    console.log("v="+r.schemaVersion+" n="+r.items.length+" pub="+String(r.published)
+      +" ground="+(it.sourceExcerpt?"yes":"no")+" link="+(it.link?"yes":"no"));
+  ' "$REC15" > "$T/rec15.txt" 2>&1
+  R15="$(command cat "$T/rec15.txt")"
+  has "$R15" "v=1" && has "$R15" "ground=yes" && has "$R15" "link=yes" \
+    && ok "and it carries the source excerpt and link per item" || bad "record shape" "$R15"
+  has "$R15" "n=0" && bad "record has zero items — it proves nothing" "$R15" || ok "and it is not an empty record"
+  has "$R15" "pub=null" && ok "the published half starts null, to be filled after review" || bad "published half" "$R15"
+fi
+has "$OUT15" "ENTITY_CHECK" && ok "the entity check is INVOKED by the pipeline, not merely present on disk" \
+  || bad "entity check never ran" "$OUT15"
+
+# Both ends. A run that writes no draft must write no record — a record of an
+# edition that never reached disk is a lie about what the model produced. This
+# reuses the seen.json from the run above, so every link is already seen.
+OUT15B="$(NEWS_EDITIONS_DIR="$T/ed15b" NEWS_CONFIG="$T/c1.json" NEWS_SEEN="$T/seen15.json" \
+  NEWS_POSTS_DIR="$T/posts15b" node "$SCRIPT" --no-llm 2>&1)"
+[ -z "$(command ls "$T/ed15b" 2>/dev/null)" ] \
+  && ok "negative control: no draft written, so no record written" \
+  || bad "a record was written for an edition that produced no draft" "$OUT15B"
+
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
