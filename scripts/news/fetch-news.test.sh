@@ -313,6 +313,17 @@ if [ -n "$REC15" ]; then
 fi
 has "$OUT15" "ENTITY_CHECK" && ok "the entity check is INVOKED by the pipeline, not merely present on disk" \
   || bad "entity check never ran" "$OUT15"
+# 🔴 Under --no-llm the check has NO POWER: the PT line is a copy of the EN line
+# and each summary is a slice of its own excerpt. It must say so. Measured
+# 2026-09-04, before this assertion existed, the same run logged
+# "0 ungrounded finding(s) ... 42 tokens checked" — a reassuring zero out of 42
+# tokens not one of which could have been missing.
+has "$OUT15" "ENTITY_CHECK VACUOUS" \
+  && ok "and it declares itself VACUOUS under --no-llm instead of reporting a clean zero" \
+  || bad "a powerless check reported a reassuring zero" "$OUT15"
+has "$OUT15" "ENTITY_CHECK 0 ungrounded" \
+  && bad "it still printed the reassuring zero line as well" "$OUT15" \
+  || ok "and the reassuring line is suppressed, not printed alongside"
 
 # Both ends. A run that writes no draft must write no record — a record of an
 # edition that never reached disk is a lie about what the model produced. This
