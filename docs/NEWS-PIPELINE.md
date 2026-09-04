@@ -316,6 +316,51 @@ The lesson generalises past this script: **a lane that cannot fail must not repo
 a pass.** `no-tokens`, `no-ground`, `not-translated` and `tautological` are four
 different ways of having nothing to say, and all four are distinct from `pass`.
 
+## The GPU is 4 GB and two models do not fit — measured 2026-09-04
+
+The digest hung for a whole session, and none of the three obvious diagnoses was
+right. Recorded because the wrong ones all *looked* right.
+
+| what it looked like | what it was |
+|---|---|
+| a stale runner from a previous run | `systemctl restart ollama` cleared it and the hang **reproduced from cold** |
+| a corrupt model blob | intact — 2 019 377 376 bytes, exactly what the manifest declares, reading at 581 MB/s |
+| the server saturated by embedding traffic | the flood was real but incidental; the hang persisted with the server idle |
+
+The actual cause, with numbers:
+
+```
+GPU total                                  4096 MiB
+llama3.2:3b   @ ctx 4096                   2.8 GB
+nomic-embed-text:latest                    595 MB
+```
+
+They do not fit together, and **ollama waits for a slot rather than evicting**.
+The runner spawns, answers its own `/health` with `{"status":2,"progress":0}`,
+sits at ~200 MB RSS, and never advances. `ollama ps` does not list it, so it is
+invisible from the obvious place to look.
+
+**A cold load with the slot free takes 7 s.** The probe budget is 30 s, so the
+timeout was never the problem and raising it only makes the hang longer.
+
+```bash
+curl -s localhost:11434/api/ps | python3 -m json.tool   # who holds the slots
+ollama stop <the OTHER model>                           # the fix
+```
+
+🔴 **Stopping `llama3.2:3b` does nothing in this state** — it is not wedged, it is
+queued. The model to stop is the one holding the slot. `fetch-news.mjs` now says
+so: on a probe timeout it reads `/api/ps` and names the actual holder, because
+the message it printed before sent the reader to the wrong model.
+
+🔴 **`ollama stop` returns 0 whether or not it stopped anything.** It returned 0
+against a runner it could not touch. Verify by `ollama ps` or by the GPU, never
+by the exit code.
+
+Durable fix, not applied here because it needs root and changes behaviour for
+every other ollama client on the machine: `OLLAMA_MAX_LOADED_MODELS=1` in the
+service environment makes ollama evict instead of wait.
+
 ## Configuration
 
 | env | default | purpose |

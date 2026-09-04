@@ -101,6 +101,14 @@ recording the model's output as the human's would make every later measurement
 the model grading itself. `NEWS_EDITIONS_DIR` redirects it for tests; a suite
 that forgets to writes fixture editions into the tracked tree.
 
+🔴 **The digest hanging is usually a GPU SLOT, not a wedged runner.** The card is
+4 GB; `llama3.2:3b` needs 2.8 GB at ctx 4096 and `nomic-embed-text` holds 595 MB,
+and ollama **waits** for a slot rather than evicting. The runner sits at
+`{"status":2,"progress":0}` forever and `ollama ps` does not list it. Stopping
+llama3.2 does nothing — stop the OTHER model. A cold load with the slot free is
+**7 s**, so the 30 s probe budget is not the issue. `curl -s localhost:11434/api/ps`
+names the holder. Full measurement in `docs/NEWS-PIPELINE.md`.
+
 🔴 `fetch-news.mjs` exit **2 is a broken instrument** (network down, Ollama
 unusable, config unreadable), never a verdict about the news. Exit 1 is a real
 quiet week. Do not chain it with `&&` as if 0/1 were the only outcomes.
