@@ -53,6 +53,23 @@ jobs:
       - name: Cron wrapper suite
         run: bash scripts/news/run-digest.test.sh
 
+      # The eval-pair machinery (docs/DIGEST-EVAL.md items 1-2). Both suites are
+      # pure: no network, no model, no clock.
+      - name: Entity/number preservation suite
+        run: bash scripts/news/check-entities.test.sh
+
+      - name: Published-half capture suite
+        run: bash scripts/news/capture-published.test.sh
+
+      # A suite is a claim that the code is tested; a mutation run is the
+      # evidence. Both harnesses restore the source and fail if it comes back
+      # dirty, so a red step here means a mutation SURVIVED — an assertion that
+      # is present and asserting nothing.
+      - name: Mutation harnesses (each mutation must turn its suite red)
+        run: |
+          bash scripts/news/check-entities.mutate.sh
+          bash scripts/news/capture-published.mutate.sh
+
       - name: Recommendations suite
         run: bash scripts/recommendations/from-issue.test.sh
 
