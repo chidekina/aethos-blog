@@ -7,6 +7,13 @@
 # 🔴 Every mutation asserts its own anchor before running. A mutation that does
 # not reach the target leaves the suite green and reads as robustness; that has
 # happened twice on this machine and cost a false "verified" both times.
+#
+# 🔴 The green test is `grep -qE "(^|[^0-9])0 failed"`, never `grep -qF "0 failed"`.
+# Measured 2026-09-04: the fixed-string form matches "10 failed" by substring, so
+# a mutation that killed TEN assertions was reported as SURVIVED. Applied by hand
+# the same mutation turned the suite red immediately. The harness was lying in the
+# one direction that matters — it under-reports the suite's teeth, so you go add
+# assertions that already exist, or you weaken code believing it is untested.
 set -uo pipefail
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$REPO/scripts/news/check-entities.mjs"
@@ -15,7 +22,7 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 
 baseline="$(bash "$SUITE" 2>&1 | tail -1)"
 echo "baseline: $baseline"
-grep -qF "0 failed" <<<"$baseline" || { echo "FATAL: suite is not green before mutating"; exit 1; }
+grep -qE "(^|[^0-9])0 failed" <<<"$baseline" || { echo "FATAL: suite is not green before mutating"; exit 1; }
 
 mutate() { # name  old  new  expect-substring
   local name="$1" old="$2" new="$3" expect="$4"
@@ -30,7 +37,7 @@ PY
   local out; out="$(bash "$SUITE" 2>&1)"
   cp "$T/orig.mjs" "$SRC"
   local failed; failed="$(grep '^  FAIL' <<<"$out" | sed 's/^  FAIL //' | tr '\n' ';')"
-  if grep -qF "0 failed" <<<"$out"; then
+  if grep -qE "(^|[^0-9])0 failed" <<<"$out"; then
     echo "  SURVIVED  $name  — the suite does not test this"
     return 1
   fi
@@ -44,7 +51,7 @@ PY
 RC=0
 echo "M1 — the EN→PT lane never finds anything missing"
 mutate "M1 translation blind" \
-  "strong: tok.strong.filter((tokenText) => !survived(tokenText))," \
+  "    strong: tok.strong.filter((tokenText) => !groundedIn(tokenText, ptLower))," \
   "strong: []," \
   "the failure this check exists for went unseen" || RC=1
 
@@ -96,8 +103,20 @@ mutate "M8 guard too broad" \
   "  if (true) {" \
   "the tautology rule swallowed a real check" || RC=1
 
+echo "M9 — the map goes one way only (the state this shipped in for a session)"
+mutate "M9 half-fixed map" \
+  "  TRANSLATION_EQUIVALENTS.set(b, [...(TRANSLATION_EQUIVALENTS.get(b) ?? []), a]);" \
+  "  void b;" \
+  "one-way map: PT→source still false-positives" || RC=1
+
+echo "M10 — the grounding lane stops consulting the map at all"
+mutate "M10 grounding lane ignores equivalents" \
+  "    strong: tok.strong.filter((tokenText) => !groundedIn(tokenText, hayLower))," \
+  "    strong: tok.strong.filter((tokenText) => !hayLower.includes(tokenText.toLowerCase()))," \
+  "one-way map: PT→source still false-positives" || RC=1
+
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"
 echo "restored: $after"
-grep -qF "0 failed" <<<"$after" || { echo "FATAL: source not restored cleanly"; exit 1; }
+grep -qE "(^|[^0-9])0 failed" <<<"$after" || { echo "FATAL: source not restored cleanly"; exit 1; }
 exit $RC

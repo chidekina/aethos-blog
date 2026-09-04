@@ -7,7 +7,7 @@ SRC="$REPO/scripts/news/excerpt.mjs"
 SUITE="$REPO/scripts/news/excerpt.test.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 base="$(bash "$SUITE" 2>&1 | tail -1)"; echo "baseline: $base"
-grep -qF "0 failed" <<<"$base" || { echo "FATAL: not green before mutating"; exit 1; }
+grep -qE "(^|[^0-9])0 failed" <<<"$base" || { echo "FATAL: not green before mutating"; exit 1; }
 
 mutate() {
   local name="$1" old="$2" new="$3" expect="$4"
@@ -21,7 +21,7 @@ io.open(p,'w',encoding='utf-8').write(t.replace(old,new,1))
 PY
   local out; out="$(bash "$SUITE" 2>&1)"; cp "$T/orig.mjs" "$SRC"
   local failed; failed="$(grep '^  FAIL' <<<"$out" | sed 's/^  FAIL //' | tr '\n' ';')"
-  grep -qF "0 failed" <<<"$out" && { echo "  SURVIVED  $name"; return 1; }
+  grep -qE "(^|[^0-9])0 failed" <<<"$out" && { echo "  SURVIVED  $name"; return 1; }
   echo "  killed    $name"; echo "            fails: $failed"
   grep -qF "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
 }
@@ -54,5 +54,5 @@ mutate "M4 touches a line under budget" \
 
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
-grep -qF "0 failed" <<<"$after" || { echo "FATAL: source not restored"; exit 1; }
+grep -qE "(^|[^0-9])0 failed" <<<"$after" || { echo "FATAL: source not restored"; exit 1; }
 exit $RC
