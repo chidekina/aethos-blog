@@ -182,6 +182,60 @@ has "$out" "lost=fail" && has "$out" "missing=LLM" \
 has "$out" "bogus=fail" && has "$out" "missing=AI" \
   && ok "and AI vanishing WITHOUT its equivalent present is still caught" || bad "map excuses the token unconditionally" "$out"
 
+echo "ARM 10 — a backfilled record: declared-absent grounds are not a broken instrument"
+# sourceExcerpt: null means "we know there is none" (edition 1 predates the record
+# writer; its feeds moved on). undefined means the record is malformed. Collapsing
+# the two would make the historical record scream exit 2 forever.
+out="$(run "
+const r=checkItem({title:'T',link:'x',sourceExcerpt:null,
+  summaryEn:'GPT-4 ships with 3 backends.',summaryPt:'O GPT-4 chega com 3 backends.'});
+console.log('en='+r.en.status+' pt='+r.pt.status+' tr='+r.translation.status);
+const bad=checkItem({title:'T',link:'x',summaryEn:'GPT-4 ships.',summaryPt:'O GPT-4 chega.'});
+console.log('undef_en='+bad.en.status);
+")"
+has "$out" "en=no-ground pt=no-ground" && ok "null grounds read no-ground, not broken" || bad "declared absence read as a fault" "$out"
+# The lane that CAN still run must still run — otherwise no-ground is a blanket
+# excuse and a backfilled record checks nothing at all.
+has "$out" "tr=pass" && ok "and the EN→PT lane still runs on that same item" || bad "no-ground disabled every lane" "$out"
+# Two-ended: a record MISSING the key entirely is still a broken instrument.
+has "$out" "undef_en=broken" && ok "an absent key is still broken — null and undefined do not collapse" || bad "malformed record excused as no-ground" "$out"
+
+BF="$T/backfilled.json"
+cat > "$BF" <<'JSON'
+{"schemaVersion":1,"dateIso":"2026-09-02","backfilled":{"from":"git"},"items":[
+ {"title":"A","link":"https://e.test/a","sourceExcerpt":null,
+  "summaryEn":"The GPT-4 router ships.","summaryPt":"O router GPT-4 chega."},
+ {"title":"B","link":"https://e.test/b","sourceExcerpt":null,
+  "summaryEn":"The LLM benchmark ships.","summaryPt":"A avaliação chega."}]}
+JSON
+out="$(node "$MOD" "$BF" 2>&1)"; rc=$?
+# Item B drops LLM, so the record has a real finding and must exit 1 — a
+# backfilled record is not exempt from the lane that still applies.
+[ $rc -eq 1 ] && ok "a backfilled record still exits 1 on a real EN→PT finding" || bad "backfilled record exit $rc (expected 1)" "$out"
+[ "$(grep -c 'NO-GROUND' <<<"$out")" = 1 ] \
+  && ok "and the no-ground notice is ONE line, not one per item per lane" \
+  || bad "no-ground repeated per item — the 81-alerts shape" "$out"
+has "$out" "dropped in PT: LLM" && ok "and the finding it can still make is reported" || bad "finding suppressed" "$out"
+
+echo "ARM 11 — a summary that IS its source is a tautology, not a pass"
+# This is the --no-llm shape: the fallback is a slice of the excerpt, so every
+# token is grounded by construction. Measured 2026-09-04, a --no-llm run logged
+# "0 ungrounded findings, 42 tokens checked" and not one of the 42 could ever
+# have been missing.
+out="$(run "
+const exc='GPT-4 Astra from OpenAI is now available in GitHub Copilot for agentic tasks.';
+const taut=checkSummary({summary:exc.slice(0,60)+'…',grounds:[exc]});
+console.log('taut='+taut.status+' checked='+taut.checked);
+const real=checkSummary({summary:'GPT-4 Astra reaches Copilot for agentic work.',grounds:[exc]});
+console.log('real='+real.status+' checked='+real.checked);
+")"
+has "$out" "taut=tautological checked=0" && ok "a summary sliced out of its source has no power to fail" || bad "tautology reported as a measurement" "$out"
+# Both ends, and this is the one that stops the rule eating everything: a genuine
+# summary that REWORDS its source must still be checked, not excused.
+has "$out" "real=pass" && ! has "$out" "real=pass checked=0" \
+  && ok "a reworded summary is still measured, with a non-zero token count" \
+  || bad "the tautology rule swallowed a real check" "$out"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

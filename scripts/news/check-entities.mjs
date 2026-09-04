@@ -151,6 +151,17 @@ export function checkSummary({ summary, grounds }) {
   const hayLower = hay.toLowerCase();
   const hayNumbers = new Set([...hay.matchAll(NUMBER_RE)].map((m) => digitsOf(m[0])));
 
+  // 🔴 If the summary IS the source — which is exactly what --no-llm produces,
+  // since the fallback is a slice of the excerpt — then every token is grounded
+  // by construction. That is a TAUTOLOGY, not a measurement, and it reports a
+  // reassuring non-zero `checked` while having no power to fail. Measured
+  // 2026-09-04: a --no-llm run logged "0 ungrounded findings, 42 tokens checked"
+  // and not one of those 42 could ever have been missing.
+  const norm = (x) => x.toLowerCase().replace(/[\s…]+/g, ' ').trim();
+  if (norm(hay).includes(norm(text)) && norm(text).length > 0) {
+    return { status: 'tautological', reason: 'the summary is a substring of its own source', checked: 0, missing: emptyMissing() };
+  }
+
   const tok = extractTokens(text);
   const missing = {
     strong: tok.strong.filter((t) => !hayLower.includes(t.toLowerCase())),
@@ -223,6 +234,32 @@ export function checkTranslation({ summaryEn, summaryPt }) {
  * PLUS the EN line it came from. Then EN → PT preservation, above.
  */
 export function checkItem(item) {
+  // `null` is DECLARED absence, `undefined` is a malformed record, and they must
+  // not collapse. A backfilled edition (one reconstructed from git, before the
+  // record writer existed) has no recoverable source excerpt: the feeds moved on,
+  // and inventing one would let the grounding lanes deliver a confident verdict
+  // about text the model never saw. That is a lane not applicable, not a broken
+  // instrument — and reporting it as broken would make the historical record
+  // scream exit 2 forever, which trains the operator to stop reading the output.
+  // Three states, not two. An ABSENT key silently degrades the ground to the
+  // headline alone — measured 2026-09-04: a record missing sourceExcerpt reported
+  // `fail` on a faithful summary, because the identifier was in the excerpt the
+  // record no longer carried. A confident verdict from a degraded ground is worse
+  // than no verdict, so a malformed record is `broken` and never scored.
+  if (item.sourceExcerpt === undefined) {
+    const mal = { status: 'broken', reason: 'record carries no sourceExcerpt key — use null to declare it absent', checked: 0, missing: emptyMissing() };
+    return { link: item.link, title: item.title, en: mal, pt: mal, translation: mal };
+  }
+  if (item.sourceExcerpt === null) {
+    const na = { status: 'no-ground', reason: 'sourceExcerpt declared null (backfilled edition)', checked: 0, missing: emptyMissing() };
+    return {
+      link: item.link,
+      title: item.title,
+      en: na,
+      pt: na,
+      translation: checkTranslation({ summaryEn: item.summaryEn, summaryPt: item.summaryPt }),
+    };
+  }
   const base = [item.sourceExcerpt, item.title];
   return {
     link: item.link,
@@ -260,19 +297,30 @@ if (isMain) {
   const anyIs = (r, s) => LANES.some((l) => r[l].status === s);
   const broken = results.filter((r) => anyIs(r, 'broken'));
   const failed = results.filter((r) => anyIs(r, 'fail'));
-  const blind = results.filter((r) => LANES.every((l) => r[l].status === 'no-tokens' || r[l].status === 'not-translated'));
+  const blind = results.filter((r) => LANES.every((l) => ['no-tokens', 'not-translated', 'no-ground', 'tautological'].includes(r[l].status)));
 
   if (asJson) {
     console.log(JSON.stringify({ edition: record.dateIso ?? null, results }, null, 2));
   } else {
+    // One line, not one per item per lane. A backfilled record has the same
+    // declared-absent grounds on every item, so printing it 2N times buries the
+    // one lane that CAN run — the "81 alerts, 0 real" shape at small scale.
+    const noGround = results.filter((r) => r.en.status === 'no-ground').length;
+    if (noGround > 0) {
+      console.log(`NO-GROUND  ${noGround} of ${results.length} items declare sourceExcerpt: null — the two grounding lanes cannot run on them. ` +
+                  `Not a pass and not a fault; a backfilled edition has no recoverable source text. The EN→PT lane below still applies.`);
+    }
     for (const r of results) {
       for (const lang of LANES) {
+        if (r[lang].status === 'no-ground') continue;   // summarised above
         const c = r[lang];
         const m = [...c.missing.strong, ...c.missing.numbers];
         const verb = lang === 'translation' ? 'dropped in PT' : 'ungrounded';
         if (c.status === 'fail') console.log(`FAIL ${lang.toUpperCase()}  ${r.title}\n     ${verb}: ${m.join(', ')}`);
         else if (c.status === 'broken') console.log(`BROKEN ${lang.toUpperCase()}  ${r.title} — ${c.reason}`);
         else if (c.status === 'no-tokens') console.log(`NO-TOKENS ${lang.toUpperCase()}  ${r.title} — nothing checkable, this is not a pass`);
+        else if (c.status === 'tautological') console.log(`TAUTOLOGICAL ${lang.toUpperCase()}  ${r.title} — ${c.reason}; this lane had no power to fail`);
+        else if (c.status === 'no-ground') console.log(`NO-GROUND ${lang.toUpperCase()}  ${r.title} — ${c.reason}; this lane cannot run, which is not a pass either`);
         if (c.missing.weak.length) console.log(`     note ${lang}: ungrounded plain capitals (informational): ${c.missing.weak.join(', ')}`);
       }
     }

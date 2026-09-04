@@ -72,6 +72,30 @@ mutate "M4 locale false positive" \
   "const digitsOf = (n) => n;" \
   "false positive on locale-correct number formatting" || RC=1
 
+echo "M5 — declared-absent grounds collapse back into 'broken'"
+mutate "M5 backfilled record screams exit 2" \
+  "  if (item.sourceExcerpt === null) {" \
+  "  if (false) {" \
+  "declared absence read as a fault" || RC=1
+
+echo "M6 — a record MISSING the key degrades to the headline instead of refusing"
+mutate "M6 verdict from a degraded ground" \
+  "  if (item.sourceExcerpt === undefined) {" \
+  "  if (false) {" \
+  "malformed record excused as no-ground" || RC=1
+
+echo "M7 — the tautology guard is removed, so a self-grounded summary scores"
+mutate "M7 tautology reported as a pass" \
+  "  if (norm(hay).includes(norm(text)) && norm(text).length > 0) {" \
+  "  if (false) {" \
+  "tautology reported as a measurement" || RC=1
+
+echo "M8 — the tautology guard eats everything"
+mutate "M8 guard too broad" \
+  "  if (norm(hay).includes(norm(text)) && norm(text).length > 0) {" \
+  "  if (true) {" \
+  "the tautology rule swallowed a real check" || RC=1
+
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"
 echo "restored: $after"
