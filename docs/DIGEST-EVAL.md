@@ -94,6 +94,31 @@ entry is the one that was measured; after it, edition 1 reports 0 findings acros
 > that the cases you imagined behave as you imagined. Run a new check over real
 > historical data before believing its verdict on new data.
 
+🔴 **And a one-way fix reads as done.** The `ai → ia` entry was added for the
+EN→PT lane. The **first full live run with the model** then flagged `IA` on the
+**PT→source** lane: the PT line says IA, the source says AI, and the map only
+looked one way. Same root cause, opposite direction, fixed for a whole session
+without being fixed. The map is bidirectional now, and `M9` mutates it back to
+one-way to keep it that way.
+
+Live runs since (8 items each, real model output, not fixtures):
+
+| run | findings | tokens checked |
+|---|---:|---:|
+| before the bidirectional fix | 1 — a false positive | 69 |
+| after | **0** | **78** |
+
+The token count is the control: zero findings out of a growing non-zero token
+count is a pass, zero out of zero is a `tautological` or `no-tokens` run.
+
+🔴 **The mutation harness itself was lying, in the direction that matters.** It
+tested for green with `grep -qF "0 failed"`, and `"10 failed"` contains that
+substring — so a mutation that killed **ten** assertions was reported as
+SURVIVED. Applied by hand the same mutation turned the suite red immediately. An
+under-reporting harness sends you to add assertions that already exist, or to
+weaken code you believe is untested. All three harnesses now use
+`grep -qE "(^|[^0-9])0 failed"`.
+
 Origin of the metric is precision-source from Nan et al., EACL 2021
 (https://aclanthology.org/2021.eacl-main.235/) — cited as provenance, not as
 tooling; the implementation is a regex.
