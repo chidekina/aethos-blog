@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T19:10:00.000Z",
+  "timestamp": "2026-09-04T19:40:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "40cbd995288b2ea27554fd474174aa3da3160fe3",
+  "head": "edeb4f09c53bb073283f5e975fa763dd845d488b",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
@@ -24,6 +24,11 @@
       "name": "ADR-001 on digest inference host — decision recorded as still open",
       "pr": 15,
       "commit": "40cbd99"
+    },
+    {
+      "name": "Session handoff itself — three items closed, one gated on Monday",
+      "pr": 16,
+      "commit": "edeb4f0"
     }
   ],
   "remaining_tasks": [
@@ -69,5 +74,5 @@
   ],
   "uncommitted_files": [],
   "next_action": "Nothing is in flight. Monday 2026-09-07: review the first cron digest against its sources before setting draft:false, then use runs 1-3 to close ADR-001.",
-  "context_notes": "Every feature shipped through a PR with CI green; production was driven end to end after #14 with the same 14 browser checks used locally. main is protected including admins, so any change — prose included — needs a branch and a PR. Two traps cost time this session and are in .continue-here.md: `bun --cwd DIR run <script>` exits 0 having run NOTHING (use `bun run --cwd DIR <script>`), and the previous checkpoint named an item that had already shipped. Re-measure a backlog item's target before working it."
+  "context_notes": "Every feature shipped through a PR with CI green; production was driven end to end after #14 with the same 14 browser checks used locally. main is protected including admins, so any change — prose included — needs a branch and a PR. Two traps cost time this session and are in .continue-here.md: `bun --cwd DIR run <script>` exits 0 having run NOTHING (use `bun run --cwd DIR <script>`), and the previous checkpoint named an item that had already shipped. Re-measure a backlog item's target before working it. NOTE on this file's `head`: a handoff cannot record the SHA of its own merge — the previous value (40cbd99) was correct when written and was superseded by the commit that merged it. Trust `git rev-parse HEAD` over this field, always."
 }
