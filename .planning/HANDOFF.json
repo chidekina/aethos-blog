@@ -1,78 +1,124 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T19:40:00.000Z",
+  "timestamp": "2026-09-04T21:00:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "edeb4f09c53bb073283f5e975fa763dd845d488b",
+  "head": "b44387afb5e53fd11e27dd302b6a76463b866b48",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
     {
-      "name": "Digest sizing question closed by measurement — no knob changed",
+      "name": "Digest sizing closed by measurement — no knob changed",
       "pr": 13,
       "commit": "76ef888"
     },
     {
-      "name": "Client-side full-text search, shipped and verified live in production",
+      "name": "Client-side full-text search, verified live in production",
       "pr": 14,
       "commit": "3cd5835"
     },
     {
-      "name": "ADR-001 on digest inference host — decision recorded as still open",
+      "name": "ADR-001 raised",
       "pr": 15,
       "commit": "40cbd99"
     },
     {
-      "name": "Session handoff itself — three items closed, one gated on Monday",
+      "name": "Session handoff",
       "pr": 16,
       "commit": "edeb4f0"
+    },
+    {
+      "name": "Corrected the handoff's own SHA and named why it goes stale",
+      "pr": 17,
+      "commit": "31689bb"
+    },
+    {
+      "name": "Auto-generated session reports gitignored",
+      "pr": 18,
+      "commit": "54a616d"
+    },
+    {
+      "name": "ADR-001 ACCEPTED (stay local) + the 5-of-8 number corrected to 7-of-7",
+      "pr": 19,
+      "commit": "ac33a69"
+    },
+    {
+      "name": "Research pass on evaluating the digest's LLM step — docs/DIGEST-EVAL.md",
+      "pr": 20,
+      "commit": "b44387a"
+    },
+    {
+      "name": "pre-task.sh ARCHITECTURE.md check fixed + first test suite (repo: claude-config)",
+      "pr": 69,
+      "commit": "895b236"
     }
   ],
   "remaining_tasks": [
     {
       "name": "Review the first cron-produced digest",
-      "context": "Cron fires Monday 2026-09-07 08:00 and has never fired on its own schedule; digest.log is still absent. Gated on time, not work. Read the RESULT= line, never the exit code — and a log with NO RESULT= line is a third state (ran, never finished), not a zero."
+      "context": "Cron fires Monday 2026-09-07 08:00; never fired on its own schedule, digest.log absent. Read the RESULT= line, not the exit code; a log with NO RESULT= line is a third state (ran, never finished). Measured on edition 1: ZERO model sentences survived into the published post — assume rewriting, not proofreading."
     },
     {
-      "name": "Close ADR-001 with evidence from the first three Monday runs",
-      "context": "docs/adr/ADR-001-digest-inference-host.md names the commands and their control."
+      "name": "Entity/number preservation check (docs/DIGEST-EVAL.md item 1)",
+      "context": "Deterministic, ~30 lines, zero deps, no labels. Targets the one observed failure: a proper noun mangled by the PT translation. Offered to the operator, not started. Cheapest real work available and blocked by nothing."
+    },
+    {
+      "name": "Persist the draft->published pair per edition (item 2)",
+      "context": "Edition 1 is recoverable only by git archaeology and only because the draft happened to be committed. Nothing captures it deliberately, so no eval set can accumulate."
+    },
+    {
+      "name": "ADR-001 follow-up: does the summarization step earn its place?",
+      "context": "Published-prose contribution is zero, but it may pay for itself as review scaffolding. --no-llm already falls back to the raw feed excerpt; one edition run that way answers it."
+    },
+    {
+      "name": "Optional: add huyenchip.com/feed.xml to sources.json",
+      "context": "Verified through this repo's own parser — 10 items, negative control 404. Three of the four blogs the operator wanted are already feeds."
     }
   ],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Decide ADR-001 after three scheduled runs",
-      "context": "Recommendation in the ADR is to wait: the failure it would fix was seen once, was transient, and two mechanisms now detect it. Deliberately left open rather than defaulted.",
+      "action": "Decide whether to build the entity/number check",
+      "context": "docs/DIGEST-EVAL.md item 1. Recommended; needs no labels, no model, no dependency.",
       "blocking": false
     },
     {
-      "action": "Decide whether enforce_admins on main should stay true",
-      "context": "Re-read from the API this session: still true, contexts ['gate']. It voids the docs-only carve-out in this repo — every prose change here needs a PR. Reversible with one gh api call.",
+      "action": "Decide whether enforce_admins on main stays true",
+      "context": "Still true, contexts ['gate']. Voids the docs-only carve-out here — every prose change needs a PR.",
+      "blocking": false
+    },
+    {
+      "action": "Merge or close claude-config#68",
+      "context": "fix/patch-survival-line-attribution is OPEN, so its improvement is OUT OF THE AIR — ~/.claude is live config, not a deploy target.",
       "blocking": false
     }
   ],
   "decisions": [
     {
-      "decision": "Digest sizing: change nothing",
-      "rationale": "The handoff's '133 clear minScore' was not the binding number — maxPerSource:3 cuts the reachable pool to 42, so the choice is 8 of 42. Lowering the cap to 2 was tried on the same run and rejected: distinct sources stayed 5 either way and it traded a score-17 item for a score-12."
+      "decision": "Stay on local Ollama (ADR-001 Accepted)",
+      "rationale": "Operator decision, strengthened by measurement: the model contributed 0 of 7 published sentences in both languages, while selection — which uses no LLM — kept 7 of 8 URLs. A hosted API would buy quality in the discarded step."
     },
     {
-      "decision": "Search indexes full post bodies, in a separate lazily-fetched file",
-      "rationale": "Metadata-only is free but measurably not a search — 9 of 20 plausible terms appear only in bodies. Inlining bodies would triple the homepage, so the index is a build-time endpoint fetched on first focus: homepage +4 KB, the 224 KB index only for someone searching."
+      "decision": "No faithfulness judge yet",
+      "rationale": "MiniCheck is genuinely SOTA for this shape (77.4% BA) but is 4.7GB with no licence tag on the 7B, and the open follow-up may delete the step it would judge."
+    },
+    {
+      "decision": "promptfoo not adopted",
+      "rationale": "Real, MIT, maintained, Ollama first-class — but its value is a prompt x model matrix we do not have. Revisit when comparing two prompts."
     },
     {
       "decision": "Playwright is not a CI dependency",
-      "rationale": "The build-time index gate guards every PR and is mutation-verified. A browser download per run is not worth it for one search box. Named as a trade — revisit if the homepage script grows."
+      "rationale": "The build-time search-index gate guards every PR and is mutation-verified; a browser download per run is not worth it for one search box."
     },
     {
-      "decision": "ADR-001 stays Proposed rather than being decided now",
-      "rationale": "The cron has not fired once on its own schedule. One real Monday says more than the reasoning; a decision by omission looks like 'preserved' and behaves like 'discarded', so 'open' is written down."
+      "decision": ".planning/reports/ ignored rather than tracked",
+      "rationale": "Derived from git log. Both conventions exist across ~/projetos (3 ignore, ~9 track), so it is a choice for this repo and revertible."
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Nothing is in flight. Monday 2026-09-07: review the first cron digest against its sources before setting draft:false, then use runs 1-3 to close ADR-001.",
-  "context_notes": "Every feature shipped through a PR with CI green; production was driven end to end after #14 with the same 14 browser checks used locally. main is protected including admins, so any change — prose included — needs a branch and a PR. Two traps cost time this session and are in .continue-here.md: `bun --cwd DIR run <script>` exits 0 having run NOTHING (use `bun run --cwd DIR <script>`), and the previous checkpoint named an item that had already shipped. Re-measure a backlog item's target before working it. NOTE on this file's `head`: a handoff cannot record the SHA of its own merge — the previous value (40cbd99) was correct when written and was superseded by the commit that merged it. Trust `git rev-parse HEAD` over this field, always."
+  "next_action": "Nothing in flight. Monday 2026-09-07: review the first cron digest. Before then, the cheapest real work is the entity/number check (DIGEST-EVAL item 1) — no labels, no model, blocked by nothing.",
+  "context_notes": "Eight PRs merged here (#13-#20) plus claude-config#69, CI green on each, production driven end to end after #14 and re-smoked after #18. Two through-lines, same lesson from opposite ends: a note about state is not state (the opening checkpoint named work already shipped in #12), and a wrong number propagates OUTWARD — ' 5 of 8' went into four research briefs before I measured it, and two agents built a recommendation on the false premise. Measure before briefing. NOTE on this file's `head`: a handoff cannot record the SHA of its own merge; trust `git rev-parse HEAD` over this field, always."
 }
