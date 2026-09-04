@@ -134,27 +134,43 @@ The ADR-001 follow-up, run rather than argued. A full `--no-llm` edition was
 generated against the live feeds (8 items, scratch dirs, production `seen.json`
 untouched) and compared with edition 1's LLM draft and its published version.
 
-| | items | median chars | truncated mid-word |
+| | items | median chars | ends mid-word |
 |---|---:|---:|---:|
-| `--no-llm` (raw feed excerpt) | 8 | 221 | **8 of 8** |
+| `--no-llm`, **byte-220 fallback** (as it shipped until today) | 8 | 221 | **8 of 8** |
+| `--no-llm`, **boundary fallback** (`excerpt.mjs`, built today) | 8 | 211 | **0 of 8** |
 | LLM draft (edition 1) | 8 | 212 | 0 |
 | published (human) | 7 | 366 | 0 |
 
-**The difference is not quality of prose — it is completeness.** Every `--no-llm`
-line is exactly 221 characters because the fallback is `slice(0, 220) + '…'`, so
-all eight end mid-word, and several carry feed boilerplate the model strips
-("Today is … day .", "The post …"). The LLM lines are complete sentences.
+**The first row was measuring the fallback, not the absence of a model** — and it
+was about to be read as evidence for keeping the LLM step. Every line was exactly
+221 characters because the fallback was `slice(0, 220) + '…'`; all eight ended
+mid-word for a reason that has nothing to do with summarization.
 
-So the step contributes **zero published prose** and **eight complete sentences to
-review**. Whether that is worth a local model is the operator's call, and it is
-now a call between two measured options instead of an argument.
+`trimToBoundary` cuts at a sentence end when one falls past half the budget, and
+otherwise at a word boundary with the ellipsis kept. Same eight items, re-run:
 
-🔴 **A third option nobody had named:** the truncation is a property of the
-FALLBACK, not of the absence of a model. Cutting at a sentence or word boundary
-instead of at byte 220 would remove most of the gap for a few lines of code — and
-would make the LLM's marginal contribution smaller than this table suggests. Do
-not decide the ADR against the current fallback; it is the weakest possible
-version of the no-LLM option.
+```
+BEFORE  …ncement spends a notable amount of time on sc…
+        …ks. In our internal testing, GPT-6… The post …
+        … Engine (GKE). To handle massive 15K+ token c…
+AFTER   …work, and long-running problem-solving tasks".
+        …-horizon, autonomous coding and agentic tasks.
+        …ipelines using Google Kubernetes Engine (GKE).
+```
+
+Six of eight now end on a full stop; the other two end on a whole word plus the
+marker. **The gap the first table showed was ours, and it cost 40 lines to close.**
+
+So the state of the question, honestly: the summarization step contributes **zero
+published prose**, and against a competent fallback its remaining advantage is
+that it strips feed boilerplate ("The post …", "Today is … day .") and compresses
+rather than truncating. That is a real but small edge, and it is now measurable
+against a fair opponent instead of a straw man we built ourselves.
+
+> The general shape, and it is the reason this row is kept rather than replaced:
+> **before comparing A against B, check that B is the best version of B.** A
+> comparison against a weak alternative is not a measurement of A; it is a
+> measurement of how little effort went into B.
 
 🔴 **Ollama was wedged during this session** and stayed wedged: `/api/tags`
 answered instantly while `/api/generate` returned nothing in 140 s. That is the

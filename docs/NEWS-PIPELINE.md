@@ -31,8 +31,10 @@ node scripts/news/capture-published.mjs scripts/news/editions/<date>.json
 bash scripts/news/fetch-news.test.sh
 bash scripts/news/check-entities.test.sh
 bash scripts/news/capture-published.test.sh
+bash scripts/news/excerpt.test.sh
 bash scripts/news/check-entities.mutate.sh        # each mutation must turn the suite red
 bash scripts/news/capture-published.mutate.sh
+bash scripts/news/excerpt.mutate.sh
 ```
 
 ## Exit codes — read them, do not chain with `&&`
@@ -286,7 +288,33 @@ prose with another's source. Two refusals matter more than the capture:
   item" and "the post body shape changed" look identical otherwise.
 
 `scripts/news/editions/` is versioned. That is the whole point: an eval set that
-lives only on one machine is not an eval set.
+lives only on one machine is not an eval set. **Edition 1 (2026-09-02) is in
+there, backfilled from `d44b785`/`e8d6510`** so the set starts with a real row
+instead of a doc describing an empty directory. Its `sourceExcerpt` is `null` and
+not recoverable — the feeds moved on — so the two grounding lanes report
+`no-ground` on it. That is a lane not applicable, not a fault, and inventing an
+excerpt would produce a confident verdict about text the model never saw.
+
+### What the check can and cannot see — measured 2026-09-04
+
+Stated so nobody reads a zero as coverage:
+
+| corpus | items | items with nothing checkable | tokens checked |
+|---|---:|---:|---:|
+| edition 1, LLM draft | 8 | 1 | 19 |
+| edition 1, published | 7 | 3 | 17 |
+| a `--no-llm` run | 8 | **8 — the check has no power at all** | 0 |
+
+🔴 **Under `--no-llm` the check is powerless by construction**, and it now says so
+with an `ENTITY_CHECK VACUOUS` line instead of a reassuring zero. The PT line is a
+copy of the EN line, so the EN→PT lane is not applicable; and each summary is a
+slice of its own excerpt, so the grounding lanes are a tautology. Before this was
+caught, the same run logged *"0 ungrounded finding(s) … 42 tokens checked"* — and
+not one of those 42 could ever have been missing.
+
+The lesson generalises past this script: **a lane that cannot fail must not report
+a pass.** `no-tokens`, `no-ground`, `not-translated` and `tautological` are four
+different ways of having nothing to say, and all four are distinct from `pass`.
 
 ## Configuration
 
