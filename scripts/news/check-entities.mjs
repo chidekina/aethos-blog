@@ -96,9 +96,32 @@ export function classify(word, { clauseInitial = false } = {}) {
  *   node --input-type=module -e "…checkTranslation over the drafts of an edition…"
  *   (the full command is in docs/DIGEST-EVAL.md § Entity check)
  */
-const TRANSLATION_EQUIVALENTS = new Map([
-  ['ai', ['ia']],   // measured, edition 1: 2 of 8 items
-]);
+const EQUIVALENT_PAIRS = [
+  ['ai', 'ia'],   // measured twice: edition 1 (EN→PT lane) and the first live LLM run (PT→source lane)
+];
+
+/**
+ * Bidirectional, because the same pair shows up in opposite directions and a
+ * one-way map fixes exactly half the false positives.
+ *
+ * 🔴 Measured 2026-09-04 in that order, which is the point: `ai → ia` was added
+ * for the EN→PT lane after edition 1 flagged 2 of 8 items. The first full live
+ * run then flagged `IA` on the PT→source lane — the PT line says IA, the source
+ * says AI, and the map only looked one way. Same root cause, opposite direction,
+ * and the one-way version read as fixed for a whole session.
+ */
+const TRANSLATION_EQUIVALENTS = new Map();
+for (const [a, b] of EQUIVALENT_PAIRS) {
+  TRANSLATION_EQUIVALENTS.set(a, [...(TRANSLATION_EQUIVALENTS.get(a) ?? []), b]);
+  TRANSLATION_EQUIVALENTS.set(b, [...(TRANSLATION_EQUIVALENTS.get(b) ?? []), a]);
+}
+
+/** Is `token` present in `haystackLower`, verbatim or as a measured equivalent? */
+const groundedIn = (token, haystackLower) => {
+  const lower = token.toLowerCase();
+  if (haystackLower.includes(lower)) return true;
+  return (TRANSLATION_EQUIVALENTS.get(lower) ?? []).some((alt) => haystackLower.includes(alt));
+};
 
 /** Digit string of a numeric literal, separators removed: `0.1` and `0,1` → `01`. */
 const digitsOf = (n) => n.replace(/[.,\s]/g, '');
@@ -164,8 +187,8 @@ export function checkSummary({ summary, grounds }) {
 
   const tok = extractTokens(text);
   const missing = {
-    strong: tok.strong.filter((t) => !hayLower.includes(t.toLowerCase())),
-    weak: tok.weak.filter((t) => !hayLower.includes(t.toLowerCase())),
+    strong: tok.strong.filter((tokenText) => !groundedIn(tokenText, hayLower)),
+    weak: tok.weak.filter((tokenText) => !groundedIn(tokenText, hayLower)),
     numbers: tok.numbers.filter((n) => !hayNumbers.has(n)),
   };
 
@@ -211,13 +234,8 @@ export function checkTranslation({ summaryEn, summaryPt }) {
 
   // A token counts as preserved if the PT line carries it verbatim OR carries a
   // measured pt-BR equivalent of it.
-  const survived = (tokenText) => {
-    const lower = tokenText.toLowerCase();
-    if (ptLower.includes(lower)) return true;
-    return (TRANSLATION_EQUIVALENTS.get(lower) ?? []).some((alt) => ptLower.includes(alt));
-  };
   const missing = {
-    strong: tok.strong.filter((tokenText) => !survived(tokenText)),
+    strong: tok.strong.filter((tokenText) => !groundedIn(tokenText, ptLower)),
     weak: [],
     numbers: tok.numbers.filter((n) => !ptNumbers.has(n)),
   };
