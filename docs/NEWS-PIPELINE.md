@@ -135,8 +135,9 @@ one is close to binding. One run, all 36 feeds, `--dry-run` so nothing is writte
 So the choice is 8 out of 42, not 8 out of 140. Raising `maxItems` to 12 reaches
 score 12; to 20, score 10. The head is thin — three items score 15+ above the
 rest — and every extra line is a line a human must check against its source, at
-a first-edition rate of 5 rewrites and 1 removal out of 8. Review is the
-bottleneck, not supply.
+a measured first-edition rate of 7 of 7 summaries rewritten and 1 item dropped
+— **zero** model sentences reached the published post, in either language. Review
+is the bottleneck, not supply. (Recompute per edition; see ADR-001.)
 
 **Lowering `maxPerSource` to 2 was tried and rejected on the same run.** It
 looks like a diversity win (one feed held ranks 1-3, 37.5% of the digest) and

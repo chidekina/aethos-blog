@@ -1,8 +1,8 @@
 # ADR-001 — Where the weekly digest runs its inference
 
-- **Status:** Proposed — the operator has not decided. Recorded so the choice is
-  made, not defaulted into.
-- **Date:** 2026-09-04
+- **Status:** **Accepted — stay on local Ollama (option A).** Decided by the
+  operator 2026-09-04, the same day this was raised.
+- **Date:** 2026-09-04 (proposed and accepted)
 - **Context:** the open question carried in `.planning/.continue-here.md`:
   *"Should the digest move off local inference?"*
 
@@ -85,9 +85,10 @@ absence that reads as "nothing to report".
 model's failure mode is documented and consistent: confident vagueness and
 mangled proper nouns ("Terminal-Bench-Science 0.1" → "Benchmark de Ciência do
 Terminal 0,1"), which is why every digest ships `draft: true` and the first
-edition needed 5 rewrites and 1 removal out of 8. A stronger model likely lowers
-that rate — and lowering it is exactly what erodes the habit of checking, which
-is the only thing standing between a hallucinated line and the published blog.
+edition is measured in "What the model actually contributed" below: **zero** of
+its sentences reached the published post. A stronger model would raise that, and
+raising it is what erodes the habit of checking — the only thing standing between
+a hallucinated line and the published blog.
 
 ## Options
 
@@ -121,11 +122,72 @@ If it is taken up anyway, **C over B** — the argument for moving is the machin
 dependency, not summary quality, and keeping quality roughly where it is
 preserves the review habit that `draft: true` exists to enforce.
 
+## What the model actually contributed (measured 2026-09-04, n=1)
+
+Raised after this ADR was first written, and it changes the reasoning rather than
+a number. The first edition survives in git as a labelled pair — the model's own
+output at `d44b785` (`draft: true`) and the published post at `e8d6510`
+(`draft: false`) — so the question is recomputable instead of remembered.
+
+| | EN | PT |
+|---|---:|---:|
+| items the model produced | 8 | 8 |
+| **URLs the human kept** | **7** | 7 |
+| **model sentences surviving verbatim** | **0 of 7** | **0 of 7** |
+
+The prose in three docs said "5 rewrites and 1 removal out of 8". The real figure
+is 7 of 7 rewritten plus 1 item dropped. Corrected everywhere; recompute below
+rather than citing these numbers.
+
+**What this reframes.** Selection is what works, and selection uses **no LLM at
+all** — it is keyword scoring in `score()`, applied before `summarizeEn` is ever
+called. The LLM runs only after the shortlist exists, and 100% of that output was
+discarded. So paying a hosted API to write better summaries would be buying
+quality in the step whose output is thrown away, while the step that earns its
+keep is deterministic and free.
+
+🔴 **What this does NOT establish.** n=1, one edition. And "no sentence shipped"
+is not "the step is worthless": a one-line summary may still earn its place as a
+*reading aid* that lets a human triage 8 items quickly, even when none of the
+text survives. That is a separate question from where inference runs, and it is
+recorded as open in "Follow-up" below rather than settled here by implication.
+
+```bash
+# recompute against any edition: the model's draft vs what was published
+git log --oneline --follow -- src/content/blog/<edition>.mdx
+git show <draft-sha>:src/content/blog/<edition>.mdx > /tmp/d.mdx
+git show <final-sha>:src/content/blog/<edition>.mdx > /tmp/f.mdx
+# CONTROL: the parser must find items in BOTH, or "0 survivors" is just a blind
+# parser reporting nothing rather than a measurement of what changed.
+```
+
 ## Decision
 
-**Open.** Revisit after the first three scheduled Monday runs, with
-`scripts/news/digest.log` as the evidence: count `RESULT=ok` against
-`RESULT=timeout` and `RESULT=BROKEN`.
+**Accepted: stay on local Ollama.** Decided by the operator on 2026-09-04.
+
+The measurement above is why this is not merely "wait and see". The case for
+moving was to remove a machine dependency at the cost of a hosted summary; the
+summaries are not what the digest ships. The wedge that motivated the question
+was seen once, was transient, and is now reported by two mechanisms (`INSTRUMENT`
+exit 2 on a wedged runner, `RESULT=timeout` from the wrapper).
+
+Revisit if the operational evidence turns, with `scripts/news/digest.log`:
+
+```bash
+grep -c 'RESULT=ok' scripts/news/digest.log
+grep -cE 'RESULT=(timeout|BROKEN)' scripts/news/digest.log
+# CONTROL: a log with no RESULT= line at all means the job never finished,
+# which is a THIRD state and not a zero in either column above.
+grep -c 'RESULT=' scripts/news/digest.log
+```
+
+## Follow-up, deliberately left open
+
+**Does the summarization step earn its place at all?** Measured contribution to
+published prose is zero. It may still pay for itself as review scaffolding. The
+honest test is to run one edition with summaries suppressed (`--no-llm` already
+exists) and see whether reviewing a bare shortlist is harder. Recorded as a
+question, not a plan — and explicitly NOT decided by this ADR.
 
 ```bash
 grep -c 'RESULT=ok' scripts/news/digest.log
