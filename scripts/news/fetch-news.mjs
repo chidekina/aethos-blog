@@ -232,15 +232,36 @@ async function ollamaAlive() {
       // forever. Stopping OUR model does nothing — the model to stop is the
       // OTHER one. A cold load with the slot free takes 7 s, so the timeout is
       // not the problem and raising it would only make the hang longer.
+      // 🔴 An EMPTY /api/ps is not evidence of an idle server, and the branch
+      // below used to read it as one — it said "genuinely wedged runner, stop
+      // <our model>". Measured 2026-09-04 on a cron rehearsal that produced
+      // RESULT=BROKEN: /api/ps read empty, generation outlived 30000ms, and a
+      // cold load with the slot PROVABLY free took 8 s on the same machine
+      // minutes later. Those three facts together identify no cause. A load
+      // queued behind a holder is invisible in /api/ps by construction, so
+      // "wedged" and "something held the card and released it" render
+      // identically there. Naming one of them is a guess wearing the clothes of
+      // a diagnosis, and it sends the operator to `ollama stop` the one model
+      // that stopping cannot help.
       const holders = await loadedModels();
-      const others = holders.filter((m) => m.name !== OLLAMA_MODEL);
-      const detail = holders.length === 0
-        ? `Nothing is reported loaded, so this looks like a genuinely wedged runner: \`ollama stop ${OLLAMA_MODEL}\`.`
-        : others.length === 0
-          ? `Only ${OLLAMA_MODEL} is loaded, so it is wedged rather than blocked: \`ollama stop ${OLLAMA_MODEL}\`.`
-          : `GPU slots are held by ${others.map((m) => `${m.name} (${m.gb} GB)`).join(', ')}. ` +
-            `On a small GPU ollama waits for a slot instead of evicting, so the fix is to free the OTHER model: ` +
-            `${others.map((m) => `\`ollama stop ${m.name}\``).join(' ')} — stopping ${OLLAMA_MODEL} would do nothing.`;
+      const others = holders.models.filter((m) => m.name !== OLLAMA_MODEL);
+      const discriminate =
+        `To tell them apart: \`curl -s ${OLLAMA_URL}/api/ps\` names any holder, and a cold load with the ` +
+        `slot free takes ~8 s here — so a probe outliving ${PROBE_TIMEOUT_MS}ms with nothing listed points ` +
+        `at the card having been occupied, not at the budget being short. Raising the budget lengthens the ` +
+        `hang without changing the outcome.`;
+      const detail = !holders.queried
+        ? `/api/ps could NOT be read (${holders.why}), so the holder is unknown. An unreadable instrument ` +
+          `is not an empty one; this is not evidence that nothing is loaded. ${discriminate}`
+        : holders.models.length === 0
+          ? `/api/ps reports nothing loaded, and that does not identify the cause — a load queued waiting ` +
+            `for a slot is invisible there by construction, so a wedged runner and a card that was held ` +
+            `and released read the same. ${discriminate}`
+          : others.length === 0
+            ? `Only ${OLLAMA_MODEL} is loaded, so it is wedged rather than blocked: \`ollama stop ${OLLAMA_MODEL}\`.`
+            : `GPU slots are held by ${others.map((m) => `${m.name} (${m.gb} GB)`).join(', ')}. ` +
+              `On a small GPU ollama waits for a slot instead of evicting, so the fix is to free the OTHER model: ` +
+              `${others.map((m) => `\`ollama stop ${m.name}\``).join(' ')} — stopping ${OLLAMA_MODEL} would do nothing.`;
       return {
         ok: false,
         reason: `catalogue answers but generation did not respond within ${PROBE_TIMEOUT_MS}ms. ${detail}`,
@@ -256,8 +277,17 @@ async function ollamaAlive() {
 
 /**
  * What ollama currently holds in memory. Best effort: this runs only on the
- * failure path, so it must never throw and never hang for long — an empty list
- * degrades the message, it does not break the diagnosis.
+ * failure path, so it must never throw and never hang for long.
+ *
+ * 🔴 It returns `queried` SEPARATELY from the list, and that separation is the
+ * whole point. The previous version returned `[]` for three different states —
+ * nothing loaded, /api/ps answering non-200, and /api/ps unreachable — and the
+ * caller then asserted "nothing is loaded" from it. A reader that cannot read
+ * and a subject that is empty are indistinguishable in a bare `[]`, and the
+ * comfortable reading of the two is the wrong one. Same family as every other
+ * zero-without-a-control recorded in this repo.
+ *
+ * @returns {Promise<{queried: boolean, models: Array<{name: string, gb: string}>, why: string}>}
  */
 async function loadedModels() {
   try {
@@ -265,14 +295,20 @@ async function loadedModels() {
     const t = setTimeout(() => ctl.abort(), 5000);
     try {
       const res = await fetch(`${OLLAMA_URL}/api/ps`, { signal: ctl.signal });
-      if (!res.ok) return [];
+      if (!res.ok) return { queried: false, models: [], why: `HTTP ${res.status}` };
       const body = await res.json();
-      return (body.models ?? []).map((m) => ({
-        name: m.name ?? m.model ?? '(unnamed)',
-        gb: ((m.size_vram ?? m.size ?? 0) / 1e9).toFixed(1),
-      }));
+      return {
+        queried: true,
+        why: '',
+        models: (body.models ?? []).map((m) => ({
+          name: m.name ?? m.model ?? '(unnamed)',
+          gb: ((m.size_vram ?? m.size ?? 0) / 1e9).toFixed(1),
+        })),
+      };
     } finally { clearTimeout(t); }
-  } catch { return []; }
+  } catch (err) {
+    return { queried: false, models: [], why: err.name === 'AbortError' ? 'timed out after 5000ms' : err.message };
+  }
 }
 
 async function ask(prompt) {
