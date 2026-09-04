@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T21:30:00.000Z",
+  "timestamp": "2026-09-04T21:35:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "7ddea0fdfce6cec3997359a9ba01356abacb606a",
+  "head": "f334b733bfc2723dfdaa54e1a3f3a54c5091e3fe",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
@@ -59,7 +59,7 @@
   "remaining_tasks": [
     {
       "name": "OPERATOR: clear the wedged Ollama before Monday 08:00",
-      "context": "PID 2353000 is the llama3.2:3b runner stuck mid-load (193MB RSS for a 2GB model), not listed by `ollama ps`. kill -9 -> operation not permitted (runs as the ollama user). `ollama stop` returned 0 and did nothing. `sudo systemctl restart ollama`, then verify by BODY not exit code. Still wedged at 08:00 -> the digest exits 2 and writes nothing."
+      "context": "PID 2353000 is the llama3.2:3b runner stuck mid-load (193MB RSS for a 2GB model), not listed by `ollama ps`. kill -9 -> operation not permitted (runs as the ollama user). `ollama stop` returned 0 and did nothing. `sudo systemctl restart ollama`, then verify by BODY not exit code. Still wedged at 08:00 -> the digest exits 2 and writes nothing. RE-PROBED at pause 2026-09-04T21:35Z: still wedged — curl status 28, body length 0, PID 2353000 resident at 178 MB. Measured on the way out, not inherited from earlier in the session."
     },
     {
       "name": "Review the first cron-produced digest",
@@ -123,5 +123,6 @@
   ],
   "uncommitted_files": [],
   "next_action": "Operator: restart Ollama before Monday 08:00, verifying by the generate BODY. Then Monday: review the digest and run capture-published.mjs on its record. ADR-001's follow-up is now a fair comparison awaiting a decision.",
-  "context_notes": "Nine commits across three PRs (#22, #23, #24), CI green on each, production smoked. The through-line of the second pass: every gate I shipped in the first pass reported CLEAN somewhere it had no power to fail. A --no-llm run logged '0 ungrounded findings, 42 tokens checked' and not one of the 42 could have been missing, because the summary IS its own source. The ADR-001 comparison was against a byte-220 slice rather than against a competent fallback — a measurement of how little effort had gone into the alternative, not of the LLM. And one of my own assertions passed by coincidence: 'ends with a letter' is not 'ends mid-word', and it was blind to the exact mutation it existed for. All three were found by pointing an instrument at real data or by mutating it, never by re-reading it. NOTE on this file's `head`: a handoff cannot record the SHA of its own commit; trust `git rev-parse HEAD`."
+  "context_notes": "Nine commits across three PRs (#22, #23, #24), CI green on each, production smoked. The through-line of the second pass: every gate I shipped in the first pass reported CLEAN somewhere it had no power to fail. A --no-llm run logged '0 ungrounded findings, 42 tokens checked' and not one of the 42 could have been missing, because the summary IS its own source. The ADR-001 comparison was against a byte-220 slice rather than against a competent fallback — a measurement of how little effort had gone into the alternative, not of the LLM. And one of my own assertions passed by coincidence: 'ends with a letter' is not 'ends mid-word', and it was blind to the exact mutation it existed for. All three were found by pointing an instrument at real data or by mutating it, never by re-reading it. NOTE on this file's `head`: a handoff cannot record the SHA of its own commit; trust `git rev-parse HEAD`.",
+  "head_note": "The SHA at the moment this file was WRITTEN, which is one commit behind the commit that carries it — a handoff cannot record the SHA of its own commit. Observed twice now (it read 7ddea0f while HEAD was f334b73). Trust `git rev-parse HEAD`, always."
 }
