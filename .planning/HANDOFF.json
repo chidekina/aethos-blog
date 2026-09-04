@@ -1,39 +1,73 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-02T21:11:42.667Z",
+  "timestamp": "2026-09-04T19:10:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "a21a7fd5ce0ef7ad4faac20c9834b1338cfef722",
+  "head": "40cbd995288b2ea27554fd474174aa3da3160fe3",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
-    {"name": "Docs + CONTRACT.md with executable validation", "pr": 3, "commit": "d44b785"},
-    {"name": "Reader recommendations page fed by a GitHub issue form", "pr": 3, "commit": "d44b785"},
-    {"name": "Weekly AI/dev news digest generator (drafts only)", "pr": 3, "commit": "d44b785"},
-    {"name": "OG font read fixed — Buffer pool defect caught by Vercel preview", "pr": 3, "commit": "d44b785"},
-    {"name": "First Radar digest reviewed against sources and published", "pr": 4, "commit": "e8d6510"},
-    {"name": "Dateless-feed cap; vacuous CONTRACT rule removed", "pr": 4, "commit": "e8d6510"},
-    {"name": "Cron installed; nvm node resolution; false-success closed", "pr": 5, "commit": "3404906"},
-    {"name": "CI gate on PRs", "pr": 5, "commit": "3404906"},
-    {"name": "Branch protection, swarmvault scaffold ignored, TS2345 fixed, astro check gate", "pr": 6, "commit": "a21a7fd"}
+    {
+      "name": "Digest sizing question closed by measurement — no knob changed",
+      "pr": 13,
+      "commit": "76ef888"
+    },
+    {
+      "name": "Client-side full-text search, shipped and verified live in production",
+      "pr": 14,
+      "commit": "3cd5835"
+    },
+    {
+      "name": "ADR-001 on digest inference host — decision recorded as still open",
+      "pr": 15,
+      "commit": "40cbd99"
+    }
   ],
-  "remaining_tasks": [],
+  "remaining_tasks": [
+    {
+      "name": "Review the first cron-produced digest",
+      "context": "Cron fires Monday 2026-09-07 08:00 and has never fired on its own schedule; digest.log is still absent. Gated on time, not work. Read the RESULT= line, never the exit code — and a log with NO RESULT= line is a third state (ran, never finished), not a zero."
+    },
+    {
+      "name": "Close ADR-001 with evidence from the first three Monday runs",
+      "context": "docs/adr/ADR-001-digest-inference-host.md names the commands and their control."
+    }
+  ],
   "blockers": [],
   "human_actions_pending": [
-    {"action": "Review the first cron-produced digest on Monday 08:00 before publishing", "context": "The generator writes draft:true; publishing is a human act after checking each line against its source. First edition needed 5 of 8 summaries rewritten and 1 removed.", "blocking": false},
-    {"action": "Decide whether enforce_admins on main should stay true", "context": "It blocks direct pushes for the repo owner too, which voids the docs-only carve-out in this repo. Applied because the Ship-Safe rule asks for it; reversible with one gh api call.", "blocking": false}
+    {
+      "action": "Decide ADR-001 after three scheduled runs",
+      "context": "Recommendation in the ADR is to wait: the failure it would fix was seen once, was transient, and two mechanisms now detect it. Deliberately left open rather than defaulted.",
+      "blocking": false
+    },
+    {
+      "action": "Decide whether enforce_admins on main should stay true",
+      "context": "Re-read from the API this session: still true, contexts ['gate']. It voids the docs-only carve-out in this repo — every prose change here needs a PR. Reversible with one gh api call.",
+      "blocking": false
+    }
   ],
   "decisions": [
-    {"decision": "Reader submissions arrive as GitHub issues, not a form endpoint", "rationale": "The site is static. Trade: submitting needs a GitHub account; in exchange there is no spam surface, no moderation queue, no runtime cost, and every entry carries a real identity to credit."},
-    {"decision": "The news digest never publishes; it writes draft:true only", "rationale": "llama3.2:3b produces confident vagueness rather than invented facts. Review is where the value is added — measured at 5 rewrites and 1 removal out of 8 on the first run."},
-    {"decision": "Invariant 2 is enforced by a test, not by CONTRACT.md", "rationale": "Two grep-shaped versions were worthless: one made publishing a violation, the other read green against a mutated generator because the frontmatter lives in a template literal the validator blanks."},
-    {"decision": "Typecheck with astro check, typescript pinned to ^6", "rationale": "tsc does not parse .astro and this src/ is 6 .astro to 3 .ts; TS 7.x is the native compiler and does not expose the API astro check needs."},
-    {"decision": "swarmvault.* gitignored, not deleted", "rationale": "Generic scaffolding from a global CLI, byte-identical to ~/projetos, referenced by nothing here. Removing another tool's state is its owner's call."}
+    {
+      "decision": "Digest sizing: change nothing",
+      "rationale": "The handoff's '133 clear minScore' was not the binding number — maxPerSource:3 cuts the reachable pool to 42, so the choice is 8 of 42. Lowering the cap to 2 was tried on the same run and rejected: distinct sources stayed 5 either way and it traded a score-17 item for a score-12."
+    },
+    {
+      "decision": "Search indexes full post bodies, in a separate lazily-fetched file",
+      "rationale": "Metadata-only is free but measurably not a search — 9 of 20 plausible terms appear only in bodies. Inlining bodies would triple the homepage, so the index is a build-time endpoint fetched on first focus: homepage +4 KB, the 224 KB index only for someone searching."
+    },
+    {
+      "decision": "Playwright is not a CI dependency",
+      "rationale": "The build-time index gate guards every PR and is mutation-verified. A browser download per run is not worth it for one search box. Named as a trade — revisit if the homepage script grows."
+    },
+    {
+      "decision": "ADR-001 stays Proposed rather than being decided now",
+      "rationale": "The cron has not fired once on its own schedule. One real Monday says more than the reasoning; a decision by omission looks like 'preserved' and behaves like 'discarded', so 'open' is written down."
+    }
   ],
   "uncommitted_files": [],
-  "next_action": "Nothing is in flight. If picking work up: STATE.md 'Next candidates' lists client-side search over posts, and watching Monday's first cron digest.",
-  "context_notes": "Every feature shipped through a PR with the pre-merge gate run on the branch HEAD. main is protected and the gate check is required, including for admins, so any further work needs a branch and a PR — a direct push to main is refused."
+  "next_action": "Nothing is in flight. Monday 2026-09-07: review the first cron digest against its sources before setting draft:false, then use runs 1-3 to close ADR-001.",
+  "context_notes": "Every feature shipped through a PR with CI green; production was driven end to end after #14 with the same 14 browser checks used locally. main is protected including admins, so any change — prose included — needs a branch and a PR. Two traps cost time this session and are in .continue-here.md: `bun --cwd DIR run <script>` exits 0 having run NOTHING (use `bun run --cwd DIR <script>`), and the previous checkpoint named an item that had already shipped. Re-measure a backlog item's target before working it."
 }
