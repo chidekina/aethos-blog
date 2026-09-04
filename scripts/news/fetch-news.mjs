@@ -17,6 +17,7 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 import { checkItem } from './check-entities.mjs';
+import { trimToBoundary, EXCERPT_BUDGET } from './excerpt.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -257,6 +258,7 @@ async function ask(prompt) {
 
 const oneParagraph = (s) => s.replace(/^["'`\s]+|["'`\s]+$/g, '').split('\n').filter(Boolean)[0] ?? '';
 
+
 // The model is shown a 700-char slice, so THAT is the ground the entity check
 // has to measure against — not the full excerpt, which would credit the model
 // with material it never saw.
@@ -444,7 +446,7 @@ for (const it of shortlist) {
       it.summaryPt = '';
     }
   }
-  const excerpt = it.summary.slice(0, 220) + (it.summary.length > 220 ? '…' : '');
+  const excerpt = trimToBoundary(it.summary, EXCERPT_BUDGET);
   if (!it.summaryEn) it.summaryEn = excerpt || it.title;
   if (!it.summaryPt) it.summaryPt = it.summaryEn;
 }
@@ -502,9 +504,11 @@ if (written.length > 0) {
   // point is that the check is INVOKED — a check nobody runs is the prose it
   // was meant to replace.
   let flagged = 0;
+  let tokensChecked = 0;
   for (const r of record.items.map(checkItem)) {
     for (const lane of ['en', 'pt', 'translation']) {
       const c = r[lane];
+      tokensChecked += c.checked ?? 0;
       if (c.status !== 'fail') continue;
       flagged++;
       const what = [...c.missing.strong, ...c.missing.numbers].join(', ');
@@ -512,7 +516,18 @@ if (written.length > 0) {
       log(`ENTITY_CHECK ${lane.toUpperCase()} "${r.title}" — ${verb}: ${what}`);
     }
   }
-  log(`ENTITY_CHECK ${flagged} ungrounded finding(s) across ${record.items.length} items (advisory — review before publishing)`);
+  // 🔴 "0 findings" out of 0 checked tokens is VACUOUS, and it reads exactly like
+  // a clean run. Measured 2026-09-04: with --no-llm the PT line is a copy of the
+  // EN line, so the EN→PT lane is not applicable on every item, and each summary
+  // IS its own source excerpt, so the grounding lanes are trivially satisfied.
+  // The check has zero power in that mode and must say so rather than reporting
+  // a reassuring zero.
+  if (tokensChecked === 0) {
+    log(`ENTITY_CHECK VACUOUS — 0 tokens were checkable across ${record.items.length} items, so the zero above means nothing. ` +
+        `Expected under --no-llm: the PT line is a copy of the EN line and each summary is its own source.`);
+  } else {
+    log(`ENTITY_CHECK ${flagged} ungrounded finding(s) across ${record.items.length} items, ${tokensChecked} tokens checked (advisory — review before publishing)`);
+  }
 }
 
 // Only mark links seen once the drafts actually exist — a crash before this
