@@ -1,133 +1,91 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T21:40:00.000Z",
+  "timestamp": "2026-09-04T21:10:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "d8979ae2504bc439f712c93f52485ec8aeabd9ab",
+  "head": "53a57e9476088085226a86b5f5a51c4cd1f586fd",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
     {
-      "name": "Digest sizing closed by measurement — no knob changed",
-      "pr": 13,
-      "commit": "76ef888"
+      "name": "Entity/number preservation check — three lanes, the third catches DELETION",
+      "pr": 22,
+      "commit": "dbcc758"
     },
     {
-      "name": "Client-side full-text search, verified live in production",
-      "pr": 14,
-      "commit": "3cd5835"
+      "name": "Edition record: the draft half, with the exact prompt excerpt",
+      "pr": 22,
+      "commit": "8f455e2"
     },
     {
-      "name": "ADR-001 raised",
-      "pr": 15,
-      "commit": "40cbd99"
+      "name": "CI runs both new suites AND both mutation harnesses",
+      "pr": 22,
+      "commit": "7cf7707"
     },
     {
-      "name": "Session handoff",
-      "pr": 16,
-      "commit": "edeb4f0"
+      "name": "Retracted the failure item 1 was built for, and the 'five rewritten' that outlived ADR-001",
+      "pr": 22,
+      "commit": "36d37f1"
     },
     {
-      "name": "Corrected the handoff's own SHA and named why it goes stale",
-      "pr": 17,
-      "commit": "31689bb"
-    },
-    {
-      "name": "Auto-generated session reports gitignored",
-      "pr": 18,
-      "commit": "54a616d"
-    },
-    {
-      "name": "ADR-001 ACCEPTED (stay local) + the 5-of-8 number corrected to 7-of-7",
-      "pr": 19,
-      "commit": "ac33a69"
-    },
-    {
-      "name": "Research pass on evaluating the digest's LLM step — docs/DIGEST-EVAL.md",
-      "pr": 20,
-      "commit": "b44387a"
-    },
-    {
-      "name": "pre-task.sh ARCHITECTURE.md check fixed + first test suite (repo: claude-config)",
-      "pr": 69,
-      "commit": "895b236"
-    },
-    {
-      "name": "Session handoff",
-      "pr": 21,
-      "commit": "827594a"
-    },
-    {
-      "name": "enforce_admins turned OFF; docs corrected; first use of the restored carve-out",
-      "pr": null,
-      "commit": "d8979ae"
-    },
-    {
-      "name": "claude-config#68 (gsd-patch-survival) — already merged; I had recorded it as open",
-      "pr": 68,
-      "commit": "cedc1a8"
+      "name": "Chip Huyen added to sources.json — 37/37 feeds reachable",
+      "pr": 23,
+      "commit": "53a57e9"
     }
   ],
   "remaining_tasks": [
     {
       "name": "Review the first cron-produced digest",
-      "context": "Cron fires Monday 2026-09-07 08:00; never fired on its own schedule, digest.log absent. Read the RESULT= line, not the exit code; a log with NO RESULT= line is a third state (ran, never finished). Measured on edition 1: ZERO model sentences survived into the published post — assume rewriting, not proofreading."
+      "context": "Cron fires Monday 2026-09-07 08:00; never fired on its own schedule, digest.log absent. Read the RESULT= line, not the exit code; a log with NO RESULT= line is a third state. RISK: Ollama was wedged all session (/api/tags instant, /api/generate silent 140s) and nothing fixed it — if still wedged the run exits 2 and writes nothing, which is the guard working, not a quiet week. New this week: the run writes scripts/news/editions/2026-09-07.json and prints ENTITY_CHECK lines; after publishing run capture-published.mjs on that record."
     },
     {
-      "name": "Entity/number preservation check (docs/DIGEST-EVAL.md item 1)",
-      "context": "Deterministic, ~30 lines, zero deps, no labels. Targets the one observed failure: a proper noun mangled by the PT translation. Offered to the operator, not started. Cheapest real work available and blocked by nothing."
-    },
-    {
-      "name": "Persist the draft->published pair per edition (item 2)",
-      "context": "Edition 1 is recoverable only by git archaeology and only because the draft happened to be committed. Nothing captures it deliberately, so no eval set can accumulate."
-    },
-    {
-      "name": "ADR-001 follow-up: does the summarization step earn its place?",
-      "context": "Published-prose contribution is zero, but it may pay for itself as review scaffolding. --no-llm already falls back to the raw feed excerpt; one edition run that way answers it."
-    },
-    {
-      "name": "Optional: add huyenchip.com/feed.xml to sources.json",
-      "context": "Verified through this repo's own parser — 10 items, negative control 404. Three of the four blogs the operator wanted are already feeds."
+      "name": "Decide ADR-001's open follow-up: does the summarization step earn its place?",
+      "context": "Now two measured options, DIGEST-EVAL section 3. Do NOT decide against the current fallback: all 8 --no-llm lines end mid-word because the fallback is slice(0,220)+'…'. Cutting at a word boundary is an unbuilt third option that would shrink the gap for a few lines of code."
     }
   ],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Decide whether to build the entity/number check",
-      "context": "docs/DIGEST-EVAL.md item 1. Recommended; needs no labels, no model, no dependency.",
+      "action": "Clear the wedged Ollama before Monday 08:00",
+      "context": "/api/tags answers instantly; /api/generate returned nothing in 140s. `ollama serve` restart. Otherwise Monday's run exits 2 and there is no digest to review.",
+      "blocking": false
+    },
+    {
+      "action": "Decide ADR-001 follow-up",
+      "context": "docs/DIGEST-EVAL.md section 3 carries the table and the unbuilt third option.",
       "blocking": false
     }
   ],
   "decisions": [
     {
+      "decision": "TRANSLATION_EQUIVALENTS carries only MEASURED entries",
+      "rationale": "One today, AI->IA, from 2 false positives in 8 real items. An allowlist grown by guessing is a place to hide real failures."
+    },
+    {
+      "decision": "The entity check is advisory, never blocking",
+      "rationale": "These are drafts and a human reads every line; a blocking gate would stop an edition over a token the reviewer was about to fix. What matters is that it is INVOKED."
+    },
+    {
+      "decision": "capture-published refuses while draft: true (exit 1), and zero matched links is exit 2",
+      "rationale": "Recording the model's output as the human's would make every later measurement the model grading itself; and 'the human cut every item' vs 'the body shape changed' are otherwise identical."
+    },
+    {
+      "decision": "scripts/news/editions/ is tracked",
+      "rationale": "An eval set that lives on one machine is not an eval set."
+    },
+    {
+      "decision": "PR #22 merged by rebase, not squash",
+      "rationale": "Squashing would collapse it back into the single 1181-line commit the local pre-commit gate rejected for mixed concerns."
+    },
+    {
       "decision": "Stay on local Ollama (ADR-001 Accepted)",
-      "rationale": "Operator decision, strengthened by measurement: the model contributed 0 of 7 published sentences in both languages, while selection — which uses no LLM — kept 7 of 8 URLs. A hosted API would buy quality in the discarded step."
-    },
-    {
-      "decision": "No faithfulness judge yet",
-      "rationale": "MiniCheck is genuinely SOTA for this shape (77.4% BA) but is 4.7GB with no licence tag on the 7B, and the open follow-up may delete the step it would judge."
-    },
-    {
-      "decision": "promptfoo not adopted",
-      "rationale": "Real, MIT, maintained, Ollama first-class — but its value is a prompt x model matrix we do not have. Revisit when comparing two prompts."
-    },
-    {
-      "decision": "Playwright is not a CI dependency",
-      "rationale": "The build-time search-index gate guards every PR and is mutation-verified; a browser download per run is not worth it for one search box."
-    },
-    {
-      "decision": ".planning/reports/ ignored rather than tracked",
-      "rationale": "Derived from git log. Both conventions exist across ~/projetos (3 ignore, ~9 track), so it is a choice for this repo and revertible."
-    },
-    {
-      "decision": "enforce_admins turned OFF on main (2026-09-04)",
-      "rationale": "With it on, the docs-only carve-out could not be exercised at all and every prose change cost a PR with no behaviour to review. The mechanism is WIDER than the rule it restores — it permits any admin push, not just prose — so what actually holds the line for code is the local ~/.git-hooks/pre-commit carve-out (11 assertions, both ends), which --no-verify bypasses and GitHub no longer catches. Revert: gh api -X PUT .../protection/enforce_admins"
+      "rationale": "Unchanged. The model contributed 0 of 7 published sentences; a hosted API would buy quality in the discarded step."
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Nothing in flight. Monday 2026-09-07: review the first cron digest. Before then, the cheapest real work is the entity/number check (DIGEST-EVAL item 1) — no labels, no model, blocked by nothing.",
-  "context_notes": "Eight PRs merged here (#13-#20) plus claude-config#69, CI green on each, production driven end to end after #14 and re-smoked after #18. Two through-lines, same lesson from opposite ends: a note about state is not state (the opening checkpoint named work already shipped in #12), and a wrong number propagates OUTWARD — ' 5 of 8' went into four research briefs before I measured it, and two agents built a recommendation on the false premise. Measure before briefing. NOTE on this file's `head`: a handoff cannot record the SHA of its own merge; trust `git rev-parse HEAD` over this field, always. RETRACTION: a previous handoff said claude-config#68 was OPEN and out of the air. It merged at 19:24:09Z, ~6 minutes after I read it as open — true when written, stale before the handoff shipped. Verify a PR by mergedAt/state and the fix by its content on main, never by an earlier listing."
+  "next_action": "Nothing in flight. Monday 2026-09-07: review the first cron digest — but clear the wedged Ollama first, or the run exits 2 and there is nothing to review. The other open item is ADR-001's follow-up, now a choice between two measured options.",
+  "context_notes": "Five commits across two PRs, CI green on both, #23 re-gated after #22 moved the base, production smoked (200 on / and /search-index.json). The through-line: a fixture suite cannot report a false positive rate. check-entities read 23/0 on fixtures and produced 2 false positives in 8 real items the first time it touched production data. Two claims retracted by measuring the file instead of reading prose about it — DIGEST-EVAL's motivating production failure NEVER HAPPENED (the PT draft kept Terminal-Bench-Science verbatim; only the decimal separator changed, which is correct pt-BR), and NEWS-PIPELINE still said 'five rewritten' after ADR-001 corrected it to 7 of 7. The first had already reached a module docstring and a test arm labelled 'THE OBSERVED PRODUCTION FAILURE' before anyone read the data. NOTE on this file's `head`: a handoff cannot record the SHA of its own commit; trust `git rev-parse HEAD` over this field, always."
 }
