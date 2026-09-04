@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T21:10:00.000Z",
+  "timestamp": "2026-09-04T21:30:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "53a57e9476088085226a86b5f5a51c4cd1f586fd",
+  "head": "7ddea0fdfce6cec3997359a9ba01356abacb606a",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
@@ -34,28 +34,52 @@
       "name": "Chip Huyen added to sources.json — 37/37 feeds reachable",
       "pr": 23,
       "commit": "53a57e9"
+    },
+    {
+      "name": "Boundary excerpt trim — the unbuilt third option of ADR-001; 8 of 8 mid-word -> 0 of 8",
+      "pr": 24,
+      "commit": "3fb5b18"
+    },
+    {
+      "name": "Four ways of having nothing to say, none of them a pass (tautological/no-ground/broken-on-absent-key)",
+      "pr": 24,
+      "commit": "0144d52"
+    },
+    {
+      "name": "ENTITY_CHECK VACUOUS instead of a reassuring zero under --no-llm",
+      "pr": 24,
+      "commit": "7881d60"
+    },
+    {
+      "name": "Edition 1 backfilled into the eval set — 7 kept, 1 cut, 0 verbatim",
+      "pr": 24,
+      "commit": "fe52dd0"
     }
   ],
   "remaining_tasks": [
     {
-      "name": "Review the first cron-produced digest",
-      "context": "Cron fires Monday 2026-09-07 08:00; never fired on its own schedule, digest.log absent. Read the RESULT= line, not the exit code; a log with NO RESULT= line is a third state. RISK: Ollama was wedged all session (/api/tags instant, /api/generate silent 140s) and nothing fixed it — if still wedged the run exits 2 and writes nothing, which is the guard working, not a quiet week. New this week: the run writes scripts/news/editions/2026-09-07.json and prints ENTITY_CHECK lines; after publishing run capture-published.mjs on that record."
+      "name": "OPERATOR: clear the wedged Ollama before Monday 08:00",
+      "context": "PID 2353000 is the llama3.2:3b runner stuck mid-load (193MB RSS for a 2GB model), not listed by `ollama ps`. kill -9 -> operation not permitted (runs as the ollama user). `ollama stop` returned 0 and did nothing. `sudo systemctl restart ollama`, then verify by BODY not exit code. Still wedged at 08:00 -> the digest exits 2 and writes nothing."
     },
     {
-      "name": "Decide ADR-001's open follow-up: does the summarization step earn its place?",
-      "context": "Now two measured options, DIGEST-EVAL section 3. Do NOT decide against the current fallback: all 8 --no-llm lines end mid-word because the fallback is slice(0,220)+'…'. Cutting at a word boundary is an unbuilt third option that would shrink the gap for a few lines of code."
+      "name": "Review the first cron-produced digest",
+      "context": "Monday 2026-09-07 08:00. Read the RESULT= line, not the exit code; no RESULT= line is a third state. The run now also writes scripts/news/editions/2026-09-07.json and prints ENTITY_CHECK lines. After publishing: node scripts/news/capture-published.mjs on that record — it refuses while draft: true."
+    },
+    {
+      "name": "Decide ADR-001's follow-up: does the summarization step earn its place?",
+      "context": "The third option is BUILT now (excerpt.mjs), so the comparison is fair: mid-word 8 of 8 -> 0 of 8. What remains of the LLM's edge is stripping feed boilerplate and compressing rather than truncating. DIGEST-EVAL section 3. Nothing blocks this but a decision."
     }
   ],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Clear the wedged Ollama before Monday 08:00",
-      "context": "/api/tags answers instantly; /api/generate returned nothing in 140s. `ollama serve` restart. Otherwise Monday's run exits 2 and there is no digest to review.",
+      "action": "sudo systemctl restart ollama",
+      "context": "The only thing in this session I could not do. Verify by reading the generate BODY, never the exit code.",
       "blocking": false
     },
     {
       "action": "Decide ADR-001 follow-up",
-      "context": "docs/DIGEST-EVAL.md section 3 carries the table and the unbuilt third option.",
+      "context": "Now a fair comparison; DIGEST-EVAL section 3.",
       "blocking": false
     }
   ],
@@ -83,9 +107,21 @@
     {
       "decision": "Stay on local Ollama (ADR-001 Accepted)",
       "rationale": "Unchanged. The model contributed 0 of 7 published sentences; a hosted API would buy quality in the discarded step."
+    },
+    {
+      "decision": "A lane that cannot fail must not report a pass",
+      "rationale": "tautological, no-ground, not-translated and no-tokens are four different ways of having nothing to say. --no-llm logged '0 findings, 42 tokens checked' where none of the 42 could have been missing."
+    },
+    {
+      "decision": "null and undefined do not collapse in an edition record",
+      "rationale": "null is declared absence (backfilled edition, feeds gone); an absent key silently degraded the ground to the headline and produced a confident `fail` on a faithful summary."
+    },
+    {
+      "decision": "Edition 1 backfilled with sourceExcerpt: null rather than a reconstructed excerpt",
+      "rationale": "Inventing one would produce a confident verdict about text the model never saw — the exact failure the file exists to avoid."
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Nothing in flight. Monday 2026-09-07: review the first cron digest — but clear the wedged Ollama first, or the run exits 2 and there is nothing to review. The other open item is ADR-001's follow-up, now a choice between two measured options.",
-  "context_notes": "Five commits across two PRs, CI green on both, #23 re-gated after #22 moved the base, production smoked (200 on / and /search-index.json). The through-line: a fixture suite cannot report a false positive rate. check-entities read 23/0 on fixtures and produced 2 false positives in 8 real items the first time it touched production data. Two claims retracted by measuring the file instead of reading prose about it — DIGEST-EVAL's motivating production failure NEVER HAPPENED (the PT draft kept Terminal-Bench-Science verbatim; only the decimal separator changed, which is correct pt-BR), and NEWS-PIPELINE still said 'five rewritten' after ADR-001 corrected it to 7 of 7. The first had already reached a module docstring and a test arm labelled 'THE OBSERVED PRODUCTION FAILURE' before anyone read the data. NOTE on this file's `head`: a handoff cannot record the SHA of its own commit; trust `git rev-parse HEAD` over this field, always."
+  "next_action": "Operator: restart Ollama before Monday 08:00, verifying by the generate BODY. Then Monday: review the digest and run capture-published.mjs on its record. ADR-001's follow-up is now a fair comparison awaiting a decision.",
+  "context_notes": "Nine commits across three PRs (#22, #23, #24), CI green on each, production smoked. The through-line of the second pass: every gate I shipped in the first pass reported CLEAN somewhere it had no power to fail. A --no-llm run logged '0 ungrounded findings, 42 tokens checked' and not one of the 42 could have been missing, because the summary IS its own source. The ADR-001 comparison was against a byte-220 slice rather than against a competent fallback — a measurement of how little effort had gone into the alternative, not of the LLM. And one of my own assertions passed by coincidence: 'ends with a letter' is not 'ends mid-word', and it was blind to the exact mutation it existed for. All three were found by pointing an instrument at real data or by mutating it, never by re-reading it. NOTE on this file's `head`: a handoff cannot record the SHA of its own commit; trust `git rev-parse HEAD`."
 }
