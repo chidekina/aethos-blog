@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T22:20:00.000Z",
+  "timestamp": "2026-09-04T22:35:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "9fec753686d45688aa3ad075d6c998ea42579fc2",
+  "head": "43eb3731368bb626c4618b9acb7c489ed6552e91",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
@@ -79,7 +79,7 @@
   "remaining_tasks": [
     {
       "name": "Review the first cron-produced digest",
-      "context": "Monday 2026-09-07 08:00. Read the RESULT= line, not the exit code; no RESULT= line is a third state. Ollama is WORKING — rehearsed end to end today: full run with the model, exit 0, 8 drafts, 78 tokens checked, 0 findings. If it hangs again the cause is the GPU slot: curl -s localhost:11434/api/ps names the holder and you stop the OTHER model, never llama3.2. After publishing run capture-published.mjs on the edition record."
+      "context": "Monday 2026-09-07 08:00. Read the RESULT= line, not the exit code; no RESULT= line is a third state. Ollama is WORKING — rehearsed end to end today: full run with the model, exit 0, 8 drafts, 78 tokens checked, 0 findings. If it hangs again the cause is the GPU slot: curl -s localhost:11434/api/ps names the holder and you stop the OTHER model, never llama3.2. After publishing run capture-published.mjs on the edition record. RE-PROBED at pause 2026-09-04T22:35Z: generate returns OK, llama3.2:3b loaded, 2743 of 4096 MiB used, keep_alive 4 min from expiry so Monday gets a cold load (7 s, inside the 30 s probe). The standoff CAN still recur: if nomic-embed-text is loaded at 08:00, llama3.2 may block again — but the digest now exits 2 naming nomic as the model to stop."
     },
     {
       "name": "Decide ADR-001's follow-up: does the summarization step earn its place?",
@@ -151,6 +151,6 @@
   ],
   "uncommitted_files": [],
   "next_action": "Nothing in flight and nothing blocked. Monday 2026-09-07: review the first cron digest — Ollama works and the run was rehearsed end to end today. The other open item is ADR-001's follow-up, now a fair comparison awaiting a decision.",
-  "context_notes": "Fourteen commits across five PRs (#22-#26), CI green on each, production smoked, and the Monday run rehearsed end to end with the model. Two through-lines. First: every gate shipped earlier in the session reported CLEAN somewhere it had no power to fail — a --no-llm run logged '0 findings, 42 tokens checked' where none of the 42 could have been missing. Second, and it kept recurring: a fix that addresses one direction reads as finished. The equivalence map fixed EN->PT and left PT->source broken; the ADR-001 comparison measured the LLM against the worst possible fallback; the mutation harness matched '10 failed' as '0 failed' and under-reported its own teeth. And three confident diagnoses of the Ollama hang were each wrong — stale runner, corrupt blob, embedding saturation — before the arithmetic showed 2.8 GB plus 595 MB on a 4 GB card. Everything here was found by running an instrument against real data or by mutating it. Nothing by re-reading it.",
-  "head_note": "The SHA at the moment this file was WRITTEN, which is one commit behind the commit that carries it — a handoff cannot record the SHA of its own commit. Observed twice now (it read 7ddea0f while HEAD was f334b73). Trust `git rev-parse HEAD`, always."
+  "context_notes": "Fourteen commits across five PRs (#22-#26), CI green on each, production smoked, and the Monday run rehearsed end to end with the model. Two through-lines. First: every gate shipped earlier in the session reported CLEAN somewhere it had no power to fail — a --no-llm run logged '0 findings, 42 tokens checked' where none of the 42 could have been missing. Second, and it kept recurring: a fix that addresses one direction reads as finished. The equivalence map fixed EN->PT and left PT->source broken; the ADR-001 comparison measured the LLM against the worst possible fallback; the mutation harness matched '10 failed' as '0 failed' and under-reported its own teeth. And three confident diagnoses of the Ollama hang were each wrong — stale runner, corrupt blob, embedding saturation — before the arithmetic showed 2.8 GB plus 595 MB on a 4 GB card. Everything here was found by running an instrument against real data or by mutating it. Nothing by re-reading it. Post-handoff, one more of the same family: a scan for leaked fixture servers matched ITSELF — `pgrep -f 'node -e'` hit the shell running the loop, because the loop's own text contained the pattern. A new PID appeared at every look and the kill took down my own command. Real leaked servers: zero. Scan by /proc/<pid>/comm, never by command text, and print the positive control beside the zero.",
+  "head_note": "The SHA at the moment this file was WRITTEN, one commit behind the commit that carries it — a handoff cannot record the SHA of its own commit. Observed THREE times now (7ddea0f/f334b73, then 9fec753/43eb373). Trust `git rev-parse HEAD`, always."
 }
