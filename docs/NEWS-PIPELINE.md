@@ -39,6 +39,11 @@ script collapses them into one code. `run-digest.sh` writes the distinction into
 
 ## Weekly cron
 
+> **Open decision:** whether this should run here at all, or move to a hosted
+> scheduler with a paid API, is recorded — undecided — in
+> [`docs/adr/ADR-001-digest-inference-host.md`](adr/ADR-001-digest-inference-host.md).
+> It is deliberately gated on evidence from the first real Monday runs.
+
 ```bash
 crontab -e
 # Monday 08:00 — writes drafts, never publishes
