@@ -109,6 +109,57 @@ and caps them. When you see that line, treat those items' recency as unknown and
 check the page before publishing — the cap limits the damage, it does not date
 anything.
 
+### Is 8 still the right size? — measured 2026-09-04
+
+The handoff carried "`maxItems` is still 8 while 133 candidates now clear
+`minScore`", read as evidence the digest was starved. **`maxItems` is not the
+binding constraint**, and the 133 never described a reachable pool.
+
+`minScore` and the per-source cap are two different gates, and only the second
+one is close to binding. One run, all 36 feeds, `--dry-run` so nothing is written:
+
+| stage | items |
+|---|---:|
+| fetched | 2772 |
+| within `maxAgeDays` (8) | 155 |
+| unseen | 148 |
+| **clears `minScore`** | **140** |
+| **reachable after `maxPerSource: 3`** | **42** |
+| shipped (`maxItems: 8`) | 8 |
+
+So the choice is 8 out of 42, not 8 out of 140. Raising `maxItems` to 12 reaches
+score 12; to 20, score 10. The head is thin — three items score 15+ above the
+rest — and every extra line is a line a human must check against its source, at
+a first-edition rate of 5 rewrites and 1 removal out of 8. Review is the
+bottleneck, not supply.
+
+**Lowering `maxPerSource` to 2 was tried and rejected on the same run.** It
+looks like a diversity win (one feed held ranks 1-3, 37.5% of the digest) and
+measured as neither: distinct sources stayed at 5 either way, and the digest
+traded a score-17 item for a score-12 one. Cap stays at 3.
+
+Both numbers stand as they are. What would reopen the question: distinct sources
+in the shipped 8 dropping to 3 or fewer, or the reachable pool (`42` here)
+falling near `maxItems`, which would mean the caps — not the editor — are
+choosing the digest.
+
+🔴 **Recompute rather than citing these numbers.** The feeds are live; every row
+above changes weekly. Both runs below write nothing and leave `seen.json`
+untouched, and the second is the control — without it, a wide config that
+silently failed to load would look like "the cap is not binding".
+
+```bash
+node scripts/news/fetch-news.mjs --dry-run          # what ships: the `shortlist` count
+
+# the reachable pool: same config, caps lifted (writes nothing)
+node -e 'const f=require("fs"),c=JSON.parse(f.readFileSync("scripts/news/sources.json","utf8"));
+c.maxItems=500;c.maxUndated=500;f.writeFileSync("/tmp/wide.json",JSON.stringify(c))'
+NEWS_CONFIG=/tmp/wide.json node scripts/news/fetch-news.mjs --dry-run | grep shortlist
+```
+
+A wide run whose `shortlist` equals the narrow run's is the instrument failing to
+read `NEWS_CONFIG`, never a genuine result.
+
 After editing, always:
 
 ```bash
