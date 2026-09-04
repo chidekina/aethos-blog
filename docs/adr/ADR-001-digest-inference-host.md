@@ -183,7 +183,8 @@ grep -c 'RESULT=' scripts/news/digest.log
 
 ## Follow-up, deliberately left open
 
-**Does the summarization step earn its place at all?** Measured contribution to
+**Does the summarization step earn its place at all?** (Research on how to
+measure it, and what to skip, is in [`docs/DIGEST-EVAL.md`](../DIGEST-EVAL.md).) Measured contribution to
 published prose is zero. It may still pay for itself as review scaffolding. The
 honest test is to run one edition with summaries suppressed (`--no-llm` already
 exists) and see whether reviewing a bare shortlist is harder. Recorded as a

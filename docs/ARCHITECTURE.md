@@ -219,5 +219,6 @@ expose the programmatic API `astro check` needs; bumping it breaks the CI step.
 | `docs/NEWS-PIPELINE.md` | how the automated digest works and how to operate it |
 | `docs/RECOMMENDATIONS.md` | how a reader suggestion becomes a page entry |
 | `docs/adr/` | architectural decisions, including the ones still open |
+| `docs/DIGEST-EVAL.md` | what to build to measure the digest's LLM step, and what to skip |
 | `CONTRACT.md` | the invariants a machine enforces |
 | `STATE.md` | current status and what is in flight |
