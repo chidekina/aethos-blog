@@ -61,6 +61,9 @@ jobs:
       - name: Published-half capture suite
         run: bash scripts/news/capture-published.test.sh
 
+      - name: Fallback excerpt trim suite
+        run: bash scripts/news/excerpt.test.sh
+
       # A suite is a claim that the code is tested; a mutation run is the
       # evidence. Both harnesses restore the source and fail if it comes back
       # dirty, so a red step here means a mutation SURVIVED — an assertion that
@@ -69,6 +72,7 @@ jobs:
         run: |
           bash scripts/news/check-entities.mutate.sh
           bash scripts/news/capture-published.mutate.sh
+          bash scripts/news/excerpt.mutate.sh
 
       - name: Recommendations suite
         run: bash scripts/recommendations/from-issue.test.sh

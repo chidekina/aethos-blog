@@ -80,11 +80,18 @@ node scripts/news/fetch-news.mjs --check-sources  # probe every feed
 bash scripts/news/fetch-news.test.sh
 bash scripts/news/check-entities.test.sh          # + .mutate.sh
 bash scripts/news/capture-published.test.sh       # + .mutate.sh
+bash scripts/news/excerpt.test.sh                 # + .mutate.sh
 python3 ~/.claude/hooks/contract-validate.py CONTRACT.md
 ```
 
 🔴 Assertion counts are deliberately not written here. A count in prose goes
 stale on the next commit and nothing recomputes it — run the suite.
+
+🔴 **A lane that cannot fail must not report a pass.** `no-tokens`, `no-ground`,
+`not-translated` and `tautological` are four ways of having nothing to say, all
+distinct from `pass`. Under `--no-llm` the entity check has zero power (PT copies
+EN; each summary is a slice of its own excerpt) and prints `ENTITY_CHECK VACUOUS`.
+Before that was caught it printed *"0 findings, 42 tokens checked"*.
 
 **The eval pair.** Every run that writes a draft also writes
 `scripts/news/editions/<date>.json` (tracked): the link, score, the exact
