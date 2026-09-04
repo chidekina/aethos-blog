@@ -12,6 +12,20 @@ node_modules/
 # news digest cron log (machine-local, not repo state)
 scripts/news/digest.log
 
+# Auto-generated session reports, written by ~/.claude/hooks/session-report.sh.
+# Ignored rather than tracked, and the distinction is not "planning files are
+# noise" — `.planning/.continue-here.md` and `.planning/HANDOFF.json` ARE tracked,
+# because they are hand-curated state that nothing else records.
+#
+# A session report is DERIVED: "9 commits from last 24h" is recomputable from
+# `git log` and disagrees with it the moment anything moves. Versioning a
+# derived snapshot beside the source it was derived from creates two answers to
+# one question, and the stale one looks authoritative.
+#
+# Both conventions exist across ~/projetos (3 repos ignore, ~9 track), so this
+# is a choice for this repo, not a house rule — reverting is deleting these lines.
+.planning/reports/
+
 # SwarmVault scaffolding. `swarmvault` (a global knowledge-vault CLI) drops a
 # generic config, a schema template and five empty directories into whatever
 # directory it is pointed at — it did so here on 2026-09-02, and the config is
