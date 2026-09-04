@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T21:00:00.000Z",
+  "timestamp": "2026-09-04T21:40:00.000Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "b44387afb5e53fd11e27dd302b6a76463b866b48",
+  "head": "d8979ae2504bc439f712c93f52485ec8aeabd9ab",
   "head_matches_remote": true,
   "working_tree_clean": true,
   "completed_this_session": [
@@ -54,6 +54,21 @@
       "name": "pre-task.sh ARCHITECTURE.md check fixed + first test suite (repo: claude-config)",
       "pr": 69,
       "commit": "895b236"
+    },
+    {
+      "name": "Session handoff",
+      "pr": 21,
+      "commit": "827594a"
+    },
+    {
+      "name": "enforce_admins turned OFF; docs corrected; first use of the restored carve-out",
+      "pr": null,
+      "commit": "d8979ae"
+    },
+    {
+      "name": "claude-config#68 (gsd-patch-survival) — already merged; I had recorded it as open",
+      "pr": 68,
+      "commit": "cedc1a8"
     }
   ],
   "remaining_tasks": [
@@ -83,11 +98,6 @@
     {
       "action": "Decide whether to build the entity/number check",
       "context": "docs/DIGEST-EVAL.md item 1. Recommended; needs no labels, no model, no dependency.",
-      "blocking": false
-    },
-    {
-      "action": "Merge or close claude-config#68",
-      "context": "fix/patch-survival-line-attribution is OPEN, so its improvement is OUT OF THE AIR — ~/.claude is live config, not a deploy target.",
       "blocking": false
     }
   ],
@@ -119,5 +129,5 @@
   ],
   "uncommitted_files": [],
   "next_action": "Nothing in flight. Monday 2026-09-07: review the first cron digest. Before then, the cheapest real work is the entity/number check (DIGEST-EVAL item 1) — no labels, no model, blocked by nothing.",
-  "context_notes": "Eight PRs merged here (#13-#20) plus claude-config#69, CI green on each, production driven end to end after #14 and re-smoked after #18. Two through-lines, same lesson from opposite ends: a note about state is not state (the opening checkpoint named work already shipped in #12), and a wrong number propagates OUTWARD — ' 5 of 8' went into four research briefs before I measured it, and two agents built a recommendation on the false premise. Measure before briefing. NOTE on this file's `head`: a handoff cannot record the SHA of its own merge; trust `git rev-parse HEAD` over this field, always."
+  "context_notes": "Eight PRs merged here (#13-#20) plus claude-config#69, CI green on each, production driven end to end after #14 and re-smoked after #18. Two through-lines, same lesson from opposite ends: a note about state is not state (the opening checkpoint named work already shipped in #12), and a wrong number propagates OUTWARD — ' 5 of 8' went into four research briefs before I measured it, and two agents built a recommendation on the false premise. Measure before briefing. NOTE on this file's `head`: a handoff cannot record the SHA of its own merge; trust `git rev-parse HEAD` over this field, always. RETRACTION: a previous handoff said claude-config#68 was OPEN and out of the air. It merged at 19:24:09Z, ~6 minutes after I read it as open — true when written, stale before the handoff shipped. Verify a PR by mergedAt/state and the fix by its content on main, never by an earlier listing."
 }
