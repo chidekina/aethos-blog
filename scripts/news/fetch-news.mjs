@@ -222,12 +222,28 @@ async function ollamaAlive() {
       if (!gres.ok) return { ok: false, reason: `generate probe HTTP ${gres.status}` };
       await gres.json();
     } catch (err) {
+      if (err.name !== 'AbortError') return { ok: false, reason: `generate probe failed — ${err.message}` };
+      // 🔴 The old message said "the runner is wedged, clear it with
+      // `ollama stop <our model>`" and that advice is WRONG for the cause we
+      // actually hit. Measured 2026-09-04 on this machine: a 4096 MiB GPU cannot
+      // hold llama3.2:3b (2.8 GB at ctx 4096) alongside nomic-embed-text
+      // (595 MB), and ollama WAITS for a slot rather than evicting. The runner
+      // spawns, answers /health with {"status":2,"progress":0}, and sits there
+      // forever. Stopping OUR model does nothing — the model to stop is the
+      // OTHER one. A cold load with the slot free takes 7 s, so the timeout is
+      // not the problem and raising it would only make the hang longer.
+      const holders = await loadedModels();
+      const others = holders.filter((m) => m.name !== OLLAMA_MODEL);
+      const detail = holders.length === 0
+        ? `Nothing is reported loaded, so this looks like a genuinely wedged runner: \`ollama stop ${OLLAMA_MODEL}\`.`
+        : others.length === 0
+          ? `Only ${OLLAMA_MODEL} is loaded, so it is wedged rather than blocked: \`ollama stop ${OLLAMA_MODEL}\`.`
+          : `GPU slots are held by ${others.map((m) => `${m.name} (${m.gb} GB)`).join(', ')}. ` +
+            `On a small GPU ollama waits for a slot instead of evicting, so the fix is to free the OTHER model: ` +
+            `${others.map((m) => `\`ollama stop ${m.name}\``).join(' ')} — stopping ${OLLAMA_MODEL} would do nothing.`;
       return {
         ok: false,
-        reason: err.name === 'AbortError'
-          ? `catalogue answers but generation did not respond within ${PROBE_TIMEOUT_MS}ms — ` +
-            `the runner is wedged. Clear it with \`ollama stop ${OLLAMA_MODEL}\`.`
-          : `generate probe failed — ${err.message}`,
+        reason: `catalogue answers but generation did not respond within ${PROBE_TIMEOUT_MS}ms. ${detail}`,
       };
     } finally {
       clearTimeout(gt);
@@ -236,6 +252,27 @@ async function ollamaAlive() {
   } catch (err) {
     return { ok: false, reason: err.message };
   }
+}
+
+/**
+ * What ollama currently holds in memory. Best effort: this runs only on the
+ * failure path, so it must never throw and never hang for long — an empty list
+ * degrades the message, it does not break the diagnosis.
+ */
+async function loadedModels() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const res = await fetch(`${OLLAMA_URL}/api/ps`, { signal: ctl.signal });
+      if (!res.ok) return [];
+      const body = await res.json();
+      return (body.models ?? []).map((m) => ({
+        name: m.name ?? m.model ?? '(unnamed)',
+        gb: ((m.size_vram ?? m.size ?? 0) / 1e9).toFixed(1),
+      }));
+    } finally { clearTimeout(t); }
+  } catch { return []; }
 }
 
 async function ask(prompt) {

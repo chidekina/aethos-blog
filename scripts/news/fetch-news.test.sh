@@ -334,6 +334,59 @@ OUT15B="$(NEWS_EDITIONS_DIR="$T/ed15b" NEWS_CONFIG="$T/c1.json" NEWS_SEEN="$T/se
   && ok "negative control: no draft written, so no record written" \
   || bad "a record was written for an edition that produced no draft" "$OUT15B"
 
+echo "ARM 16 - a blocked load names the model HOLDING the slot, not ours"
+# Measured 2026-09-04: a 4096 MiB GPU cannot hold llama3.2:3b (2.8 GB at ctx
+# 4096) beside nomic-embed-text (595 MB), and ollama WAITS for a slot instead
+# of evicting. The runner spawns, answers its own /health with
+# {"status":2,"progress":0}, and never advances. The old advice - `ollama stop
+# <our model>` - does nothing there: the model to stop is the OTHER one. A cold
+# load with the slot free takes 7 s, so the timeout was never the problem.
+#
+# Servers start INLINE, mirroring ARM 14. A helper that backgrounded the server
+# and returned its PID through $( ) hung the whole suite: command substitution
+# waits for stdout to CLOSE, and redirecting the child did not release it.
+OP16=$(( 20000 + RANDOM % 20000 ))
+node -e '
+const http=require("http"); const PS=process.argv[2];
+http.createServer((q,r)=>{
+  if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
+  if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});return r.end(PS);}
+  // /api/generate: accept and never answer -- a load that never completes
+}).listen(process.argv[1]);
+' "$OP16" '{"models":[{"name":"nomic-embed-text:latest","size_vram":595000000},{"name":"llama3.2:3b","size_vram":2750261248}]}' &
+P16=$!
+for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP16/api/tags" >/dev/null && break; done
+OUT16="$(OLLAMA_URL="http://127.0.0.1:$OP16" NEWS_PROBE_TIMEOUT_MS=2000 \
+  run "$T/c1.json" "$T/seen16.json" "$T/posts16")"; ST16=$?
+kill "$P16" 2>/dev/null
+[ "$ST16" = 2 ] && ok "a blocked load is still exit 2" || bad "blocked load exit $ST16" "$OUT16"
+has "$OUT16" "ollama stop nomic-embed-text:latest" \
+  && ok "the log names the OTHER model as the one to stop" || bad "log does not name the blocker" "$OUT16"
+has "$OUT16" "stopping llama3.2:3b would do nothing" \
+  && ok "and says plainly that stopping ours would not help" || bad "the misleading advice survives" "$OUT16"
+
+# Both ends. With only OUR model loaded the advice must flip back, otherwise
+# the new branch is just a different fixed string.
+OP16B=$(( 20000 + RANDOM % 20000 ))
+node -e '
+const http=require("http"); const PS=process.argv[2];
+http.createServer((q,r)=>{
+  if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
+  if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});return r.end(PS);}
+  // /api/generate: accept and never answer -- a load that never completes
+}).listen(process.argv[1]);
+' "$OP16B" '{"models":[{"name":"llama3.2:3b","size_vram":2750261248}]}' &
+P16B=$!
+for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP16B/api/tags" >/dev/null && break; done
+OUT16B="$(OLLAMA_URL="http://127.0.0.1:$OP16B" NEWS_PROBE_TIMEOUT_MS=2000 \
+  run "$T/c1.json" "$T/seen16b.json" "$T/posts16b")"
+kill "$P16B" 2>/dev/null
+has "$OUT16B" "wedged rather than blocked" \
+  && ok "only-ours-loaded flips the advice back to stopping ours" || bad "advice did not adapt" "$OUT16B"
+has "$OUT16B" "nomic" && bad "it named a model that is not loaded" "$OUT16B" || ok "and it invents no blocker that is not there"
+
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
