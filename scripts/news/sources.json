@@ -218,6 +218,12 @@
       "maxPerDigest": 1
     },
     {
+      "name": "Chip Huyen",
+      "url": "https://huyenchip.com/feed.xml",
+      "tag": "ai",
+      "weight": 3
+    },
+    {
       "name": "James Bach",
       "url": "https://www.satisfice.com/blog/feed",
       "tag": "testing",
