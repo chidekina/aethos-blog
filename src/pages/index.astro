@@ -19,6 +19,21 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
     </p>
   </div>
 
+  <!-- Search -->
+  <div style="margin-bottom: 1.25rem;">
+    <label for="post-search" class="sr-only" data-i18n="search.label">Search posts</label>
+    <input
+      type="search"
+      id="post-search"
+      autocomplete="off"
+      placeholder="Search posts…"
+      data-i18n-placeholder="search.placeholder"
+      aria-describedby="search-status"
+      style="width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-text); background: var(--color-muted); border: 1px solid var(--color-border); border-radius: 6px; padding: 0.6rem 0.7rem; min-height: 44px;"
+    />
+    <p id="search-status" role="status" aria-live="polite" style="font-size: 0.72rem; color: var(--color-text-muted); margin: 0.4rem 0 0; min-height: 1em;"></p>
+  </div>
+
   <!-- Filters -->
   {allTags.length > 0 && (
     <div id="filters" style="margin-bottom: 2rem;" role="search" aria-label="Filter posts">
@@ -78,6 +93,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
           <article
             class="post-item"
             data-lang={post.data.lang}
+            data-slug={post.slug}
             data-tags={post.data.tags.join(',')}
             style="padding: 1.5rem 0; border-bottom: 1px solid var(--color-border);"
             role="listitem"
@@ -152,6 +168,54 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
   let activeLang = localStorage.getItem('aethos-lang') || 'all';
   let activeTag = new URLSearchParams(window.location.search).get('tag') || '';
 
+  const searchInput = document.getElementById('post-search') as HTMLInputElement | null;
+  const searchStatus = document.getElementById('search-status');
+  let activeQuery = (new URLSearchParams(window.location.search).get('q') || '').trim();
+
+  // slug -> full lowercased text. Null until /search-index.json has loaded.
+  let index: Map<string, string> | null = null;
+  let indexState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle';
+
+  // Body text is NOT in this page's markup — inlining it would roughly triple
+  // the homepage. Until the index arrives a query cannot be answered, and
+  // answering it from titles alone would produce confident false "no results"
+  // for terms that are in the posts. So the status line says which state we are
+  // in rather than silently showing a wrong list.
+  async function loadIndex() {
+    if (indexState === 'loading' || indexState === 'ready') return;
+    indexState = 'loading';
+    setStatus();
+    try {
+      const res = await fetch('/search-index.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows: Array<{ slug: string; text: string }> = await res.json();
+      index = new Map(rows.map((r) => [r.slug, r.text]));
+      indexState = 'ready';
+    } catch {
+      index = null;
+      indexState = 'failed';
+    }
+    applyFilters();
+  }
+
+  function statusText(visible: number): string {
+    const lang = localStorage.getItem('aethos-lang') || 'en';
+    const pt = lang === 'pt';
+    if (!activeQuery) return '';
+    if (indexState === 'loading') return pt ? 'Carregando busca…' : 'Loading search…';
+    if (indexState === 'failed') {
+      return pt
+        ? 'Busca indisponível — o índice não carregou. Os filtros por tag continuam funcionando.'
+        : 'Search unavailable — the index failed to load. Tag filters still work.';
+    }
+    if (visible === 1) return pt ? '1 artigo encontrado' : '1 post found';
+    return pt ? `${visible} artigos encontrados` : `${visible} posts found`;
+  }
+
+  function setStatus(visible = 0) {
+    if (searchStatus) searchStatus.textContent = statusText(visible);
+  }
+
   function setBtn(btn: HTMLButtonElement, active: boolean) {
     btn.dataset.active = String(active);
     btn.setAttribute('aria-pressed', String(active));
@@ -162,14 +226,24 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
     items.forEach((item) => {
       const lang = item.dataset.lang ?? '';
       const tags = item.dataset.tags?.split(',') ?? [];
-      const show = (activeLang === 'all' || lang === activeLang) && (!activeTag || tags.includes(activeTag));
+      const slug = item.dataset.slug ?? '';
+      // A pending or failed index must not silently filter the list down.
+      const matchesQuery =
+        !activeQuery || indexState !== 'ready' || (index?.get(slug) ?? '').includes(activeQuery.toLowerCase());
+      const show =
+        (activeLang === 'all' || lang === activeLang) &&
+        (!activeTag || tags.includes(activeTag)) &&
+        matchesQuery;
       item.style.display = show ? '' : 'none';
       if (show) visible++;
     });
     if (noResults) noResults.hidden = visible !== 0;
 
+    setStatus(visible);
+
     const p = new URLSearchParams();
     if (activeTag) p.set('tag', activeTag);
+    if (activeQuery) p.set('q', activeQuery);
     const qs = p.toString();
     history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
   }
@@ -181,7 +255,19 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
     applyFilters();
   }));
 
+  if (searchInput) {
+    searchInput.value = activeQuery;
+    searchInput.addEventListener('focus', loadIndex, { once: true });
+    searchInput.addEventListener('input', () => {
+      activeQuery = searchInput.value.trim();
+      if (activeQuery) loadIndex();
+      applyFilters();
+    });
+  }
+
   tagBtns.forEach((b) => setBtn(b, b.dataset.tag === activeTag));
+  // A shared ?q= link must work without waiting for a focus that never comes.
+  if (activeQuery) loadIndex();
   applyFilters();
 
   // Re-filter when header lang toggle fires

@@ -247,6 +247,8 @@ const websiteSchema = {
           'post.min-read': 'min read',
           'post.no-posts': 'No posts yet. Check back soon.',
           'post.no-results': 'No posts match this filter.',
+          'search.label': 'Search posts',
+          'search.placeholder': 'Search posts…',
           'post.part-of': 'Part of:',
           'post.series': 'Series:',
         },
@@ -267,6 +269,8 @@ const websiteSchema = {
           'post.min-read': 'min de leitura',
           'post.no-posts': 'Nenhum post ainda. Volte em breve.',
           'post.no-results': 'Nenhum post encontrado para esse filtro.',
+          'search.label': 'Buscar artigos',
+          'search.placeholder': 'Buscar artigos…',
           'post.part-of': 'Parte de:',
           'post.series': 'Série:',
         },
@@ -287,6 +291,12 @@ const websiteSchema = {
         document.querySelectorAll('[data-i18n]').forEach((el) => {
           const key = (el as HTMLElement).dataset.i18n!;
           if (i18n[lang]?.[key]) el.textContent = i18n[lang][key];
+        });
+        // `placeholder` is an attribute, not a text node, so the loop above cannot
+        // reach it — a search box translated by that loop alone stays English.
+        document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]').forEach((el) => {
+          const key = el.dataset.i18nPlaceholder!;
+          if (i18n[lang]?.[key]) el.placeholder = i18n[lang][key];
         });
         // Show/hide full content blocks (e.g. about page)
         document.querySelectorAll<HTMLElement>('[data-lang-block]').forEach((el) => {

@@ -66,6 +66,74 @@ jobs:
             exit 1
           }
 
+      # Search is only as good as what reaches the index, and a narrowed index
+      # fails SILENTLY: queries just stop matching. The body-text assertion below
+      # is derived from the live posts rather than hardcoding a term, so it keeps
+      # meaning as the corpus changes.
+      - name: Assert the search index carries body text, not just metadata
+        run: |
+          python3 - <<'PY'
+          import glob, json, os, re, sys
+
+          idx_path = 'dist/search-index.json'
+          if not os.path.exists(idx_path):
+              print('::error::dist/search-index.json was not emitted'); sys.exit(1)
+          rows = json.load(open(idx_path, encoding='utf-8'))
+          by_slug = {r['slug']: r['text'] for r in rows}
+
+          # Positive control: an empty index would satisfy every "absent" check below.
+          if not rows:
+              print('::error::search index is empty — the checks below would be vacuous'); sys.exit(1)
+
+          published = {os.path.basename(os.path.dirname(f)) for f in glob.glob('dist/blog/*/index.html')}
+          missing = sorted(published - set(by_slug))
+          if missing:
+              print(f'::error::published posts absent from the search index: {missing}'); sys.exit(1)
+
+          # The load-bearing one. For each post, find a word that appears in its
+          # BODY but not in its title/description/tags; that word must be indexed.
+          # If the index ever narrows to metadata, every such word disappears.
+          checked = 0
+          for f in glob.glob('src/content/blog/*.mdx'):
+              raw = open(f, encoding='utf-8').read()
+              m = re.match(r'^---\n(.*?)\n---\n(.*)$', raw, re.S)
+              if not m:
+                  print(f'::error::{f} has no frontmatter'); sys.exit(1)
+              fm, body = m.group(1), m.group(2)
+              if re.search(r'^draft:\s*true\s*$', fm, re.M):
+                  continue
+              slug = os.path.basename(f)[:-4]
+              if slug not in by_slug:
+                  continue
+              meta = fm.lower()
+              prose = re.sub(r'```[\s\S]*?```', ' ', body).lower()
+              cand = [w for w in re.findall(r'[a-z]{6,}', prose) if w not in meta]
+              if not cand:
+                  continue
+              word = cand[0]
+              if word not in by_slug[slug]:
+                  print(f'::error::body word "{word}" from {slug} is not in the search index — '
+                        f'the index looks metadata-only'); sys.exit(1)
+              checked += 1
+
+          if checked == 0:
+              print('::error::no post yielded a body-only word — this check proved nothing'); sys.exit(1)
+
+          # Negative control: a matcher that matched everything would pass all of the above.
+          junk = 'zzzqxnotaword'
+          if any(junk in text for text in by_slug.values()):
+              print('::error::negative control matched — the index is not what it claims'); sys.exit(1)
+
+          drafts = {os.path.basename(f)[:-4] for f in glob.glob('src/content/blog/*.mdx')
+                    if re.search(r'^draft:\s*true\s*$', open(f, encoding='utf-8').read().split('---')[1], re.M)}
+          leaked = sorted(drafts & set(by_slug))
+          if leaked:
+              print(f'::error::draft posts reached the search index: {leaked}'); sys.exit(1)
+
+          print(f'ok: {len(rows)} posts indexed, body text verified on {checked}, '
+                f'{len(drafts)} draft(s) excluded')
+          PY
+
       - name: Assert drafts stay out of the published output
         run: |
           python3 - <<'PY'

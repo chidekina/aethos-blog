@@ -108,6 +108,69 @@ becomes unreachable while the build stays green.
   of `BaseLayout.astro`. It is decorative, `aria-hidden`, and pointer-events
   none.
 
+## Search
+
+Client-side, over the full text of every post. Two pieces:
+
+- `src/pages/search-index.json.ts` — a build-time endpoint emitting
+  `dist/search-index.json`: one row per published post, `{slug, lang, text}`,
+  with `text` pre-lowercased and stripped of code fences and JSX.
+- the homepage script — a substring match over that index, folded into the same
+  `applyFilters()` the tag and language filters already use.
+
+**The index is a separate file, fetched lazily on first focus, and that is the
+whole design.** Post bodies total ~281 KB against a ~142 KB homepage; inlining
+them would roughly triple the page for every visitor to serve the few who
+search. Measured after the change: the homepage grew 142010 → 145980 bytes
+(+4 KB, the markup and slugs), and `search-index.json` is 224 KB that only a
+searcher downloads.
+
+🔴 **Metadata-only search was built, measured, and thrown away.** Indexing just
+titles, descriptions and tags is free — that text is already in the DOM — but of
+20 plausible query terms, **9 appear only in post bodies**: `typescript`,
+`deploy`, `migration`, `cache`, `webhook`, `neon`, `rss`, `stripe`, `benchmark`.
+A search that answers "no posts match" for `typescript` on this blog is worse
+than no search, because the reader cannot tell a missing post from a narrow
+index. Recompute before assuming it is still 9:
+
+```bash
+bun run build
+python3 - <<'PY'
+import json, glob, re
+rows = json.load(open('dist/search-index.json', encoding='utf-8'))
+meta = ' '.join(re.match(r'^---\n(.*?)\n---', open(f, encoding='utf-8').read(), re.S).group(1)
+                for f in glob.glob('src/content/blog/*.mdx')).lower()
+terms = ['typescript','deploy','migration','cache','webhook','neon','rss','stripe','benchmark']
+body_only = [t for t in terms if t not in meta and any(t in r['text'] for r in rows)]
+assert any(t in ' '.join(r['text'] for r in rows) for t in terms), 'CONTROL: index reads empty'
+print(len(body_only), 'terms reachable only because bodies are indexed:', body_only)
+PY
+```
+
+**A narrowed index fails silently** — queries simply stop matching, with no error
+anywhere. The CI gate therefore derives, per post, a word that appears in the
+body but not in the frontmatter and asserts it is in that post's indexed text.
+Verified by mutation: deleting `toPlainText(post.body)` from the endpoint turns
+the step red (`body word "hackers" from 2026-03-02-docker-cheap-vps is not in
+the search index`), and the step is green on the restored file.
+
+### States the reader can be in
+
+Body text is not in the page markup, so a query cannot be answered before the
+index arrives. Rather than filtering on titles in the meantime — which produces
+confident false "no results" — the status line names the state: `Loading
+search…`, a result count, or `Search unavailable` if the fetch fails, with tag
+filters still working. `?q=` in the URL is shareable and loads the index without
+waiting for a focus that will never come.
+
+### Verified by driving it
+
+Fourteen checks in headless Chromium at a 390px viewport, including the two that
+a build cannot answer: the index is **not** fetched on page load, and a nonsense
+query shows the empty state rather than everything. Playwright is deliberately
+**not** a CI dependency — the build-time index gate is what runs on every PR;
+the browser pass is a manual check when the homepage script changes.
+
 ## Build and deploy
 
 ```bash
