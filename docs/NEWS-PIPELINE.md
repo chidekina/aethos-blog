@@ -361,6 +361,55 @@ Durable fix, not applied here because it needs root and changes behaviour for
 every other ollama client on the machine: `OLLAMA_MAX_LOADED_MODELS=1` in the
 service environment makes ollama evict instead of wait.
 
+### An EMPTY `/api/ps` identifies no cause — measured 2026-09-04, cron rehearsal
+
+The section above is written for the case where `/api/ps` **names a holder**. It
+does not always. The first rehearsal of the cron entry, fired from a real
+crontab rather than simulated with `env -i`, produced:
+
+```
+[news] INSTRUMENT: Ollama unusable — catalogue answers but generation did not
+       respond within 30000ms. Nothing is reported loaded, so this looks like a
+       genuinely wedged runner: `ollama stop llama3.2:3b`.
+RESULT=BROKEN
+```
+
+Three facts measured on the same machine within ten minutes:
+
+| | |
+|---|---|
+| `/api/ps` at the moment of the timeout | **empty** |
+| generation during the run | **outlived 30 000 ms** |
+| cold load minutes later, GPU at 0 MiB of 4096 | **8 s**, `curl` status 0 |
+
+Together those identify **no cause**. The 8 s cold load rules out the budget;
+the empty `/api/ps` rules nothing in, because **a load queued waiting for a slot
+is invisible there by construction** — the same property this document already
+records one section up. So "the runner is wedged" and "something held the card
+and released it" render identically, and the message picked the first, whose
+prescribed fix (`ollama stop` our own model) is the one measurement had already
+refuted.
+
+🔴 **And `loadedModels()` returned `[]` for three different states**: nothing
+loaded, `/api/ps` answering non-200, and `/api/ps` unreachable. An unreadable
+reader and an empty subject were the same value, so a broken instrument was
+reported as a finding about the server. It now returns `queried` separately, and
+the message says which of the two it is.
+
+What the pipeline reports today, per reading:
+
+| `/api/ps` | message |
+|---|---|
+| names another model | free the **other** model, with its name and size |
+| names only ours | wedged rather than blocked, stop ours |
+| answers, empty | states plainly that this identifies no cause, and why |
+| cannot be read | names it unreadable, never as empty |
+
+The rehearsal is what surfaced this: the wrapper itself is sound — it resolved
+node through nvm under cron's `PATH`, fetched 2779 items, shortlisted 8, and
+wrote its `RESULT=` line. Only the diagnosis was wrong, and only a real firing
+showed it.
+
 ## Configuration
 
 | env | default | purpose |

@@ -107,7 +107,9 @@ and ollama **waits** for a slot rather than evicting. The runner sits at
 `{"status":2,"progress":0}` forever and `ollama ps` does not list it. Stopping
 llama3.2 does nothing — stop the OTHER model. A cold load with the slot free is
 **7 s**, so the 30 s probe budget is not the issue. `curl -s localhost:11434/api/ps`
-names the holder. Full measurement in `docs/NEWS-PIPELINE.md`.
+names the holder **when there is one listed** — an EMPTY `/api/ps` identifies no
+cause at all, because a queued load is invisible there by construction, and the
+digest now says so instead of guessing. Full measurement in `docs/NEWS-PIPELINE.md`.
 
 🔴 `fetch-news.mjs` exit **2 is a broken instrument** (network down, Ollama
 unusable, config unreadable), never a verdict about the news. Exit 1 is a real
