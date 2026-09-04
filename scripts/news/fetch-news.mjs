@@ -16,6 +16,7 @@
  * chain this with `&&` as if 0/1 were the only outcomes.
  */
 import { XMLParser } from 'fast-xml-parser';
+import { checkItem } from './check-entities.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +28,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const CONFIG_PATH = process.env.NEWS_CONFIG ?? join(ROOT, 'scripts/news/sources.json');
 const SEEN_PATH = process.env.NEWS_SEEN ?? join(ROOT, 'scripts/news/seen.json');
 const POSTS_DIR = process.env.NEWS_POSTS_DIR ?? join(ROOT, 'src/content/blog');
+// The draft side of the eval pair (DIGEST-EVAL item 2). Edition 1 survives only
+// because its draft happened to be committed before review, and only by git
+// archaeology; nothing captured it on purpose, so no eval set could accumulate.
+const EDITIONS_DIR = process.env.NEWS_EDITIONS_DIR ?? join(ROOT, 'scripts/news/editions');
 
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2:3b';
@@ -252,12 +257,17 @@ async function ask(prompt) {
 
 const oneParagraph = (s) => s.replace(/^["'`\s]+|["'`\s]+$/g, '').split('\n').filter(Boolean)[0] ?? '';
 
+// The model is shown a 700-char slice, so THAT is the ground the entity check
+// has to measure against — not the full excerpt, which would credit the model
+// with material it never saw.
+const PROMPT_EXCERPT = 700;
+
 async function summarizeEn(item) {
   const out = await ask(
     `You are writing one entry of a developer news digest. In ONE sentence of at most 35 words, ` +
     `say plainly what happened and why a working software engineer should care. No preamble, no ` +
     `"this article", no marketing adjectives. Output the sentence only.\n\n` +
-    `Headline: ${item.title}\nSource: ${item.source}\nExcerpt: ${item.summary.slice(0, 700)}`
+    `Headline: ${item.title}\nSource: ${item.source}\nExcerpt: ${item.summary.slice(0, PROMPT_EXCERPT)}`
   );
   return oneParagraph(out);
 }
@@ -450,6 +460,59 @@ for (const lang of ['en', 'pt']) {
   if (existsSync(file)) { log(`SKIP ${file} — already exists, not overwriting`); continue; }
   writeFileSync(file, renderPost({ lang, dateIso, items: shortlist, tags }), 'utf8');
   written.push(file);
+}
+
+// The edition record — the DRAFT half of the eval pair (DIGEST-EVAL item 2).
+// Written only when a draft actually reached disk, for the same reason seen.json
+// is: a record of an edition that was never emitted is a lie about what the
+// model produced. `sourceExcerpt` is the exact slice the prompt carried, so the
+// entity check measures the model against what it was shown and nothing more.
+if (written.length > 0) {
+  mkdirSync(EDITIONS_DIR, { recursive: true });
+  const recordPath = join(EDITIONS_DIR, `${dateIso}.json`);
+  const record = {
+    schemaVersion: 1,
+    dateIso,
+    generatedAt: new Date().toISOString(),
+    llm: useLlm,
+    model: useLlm ? OLLAMA_MODEL : null,
+    drafts: written,
+    items: shortlist.map((it) => ({
+      title: it.title,
+      link: it.link,
+      source: it.source,
+      score: it.score,
+      sourceExcerpt: String(it.summary ?? '').slice(0, PROMPT_EXCERPT),
+      summaryEn: it.summaryEn,
+      summaryPt: it.summaryPt,
+    })),
+    // Filled in by capture-published.mjs after a human flips `draft: false`.
+    published: null,
+  };
+  if (existsSync(recordPath)) {
+    log(`SKIP ${recordPath} — an edition record for ${dateIso} already exists, not overwriting`);
+  } else {
+    writeFileSync(recordPath, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    log(`WROTE ${recordPath}`);
+  }
+
+  // Advisory only, and deliberately so: these are drafts, a human reads every
+  // line against its source before publishing, and a blocking gate here would
+  // stop an edition over a token the reviewer was about to fix anyway. The
+  // point is that the check is INVOKED — a check nobody runs is the prose it
+  // was meant to replace.
+  let flagged = 0;
+  for (const r of record.items.map(checkItem)) {
+    for (const lane of ['en', 'pt', 'translation']) {
+      const c = r[lane];
+      if (c.status !== 'fail') continue;
+      flagged++;
+      const what = [...c.missing.strong, ...c.missing.numbers].join(', ');
+      const verb = lane === 'translation' ? 'dropped in the PT line' : 'not in the source';
+      log(`ENTITY_CHECK ${lane.toUpperCase()} "${r.title}" — ${verb}: ${what}`);
+    }
+  }
+  log(`ENTITY_CHECK ${flagged} ungrounded finding(s) across ${record.items.length} items (advisory — review before publishing)`);
 }
 
 // Only mark links seen once the drafts actually exist — a crash before this
