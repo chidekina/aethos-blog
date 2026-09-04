@@ -21,7 +21,18 @@ node scripts/news/fetch-news.mjs --check-sources   # probe every feed, write not
 node scripts/news/fetch-news.mjs --dry-run         # show the shortlist, write nothing
 node scripts/news/fetch-news.mjs                   # write both drafts
 node scripts/news/fetch-news.mjs --no-llm          # feed excerpts instead of summaries
-bash  scripts/news/fetch-news.test.sh              # 19 assertions, 8 arms
+
+# the eval pair (docs/DIGEST-EVAL.md items 1-2)
+node scripts/news/check-entities.mjs scripts/news/editions/<date>.json
+node scripts/news/capture-published.mjs scripts/news/editions/<date>.json
+
+# suites — run them, do not cite their assertion counts here: a count in prose
+# goes stale on the next commit and nothing recomputes it
+bash scripts/news/fetch-news.test.sh
+bash scripts/news/check-entities.test.sh
+bash scripts/news/capture-published.test.sh
+bash scripts/news/check-entities.mutate.sh        # each mutation must turn the suite red
+bash scripts/news/capture-published.mutate.sh
 ```
 
 ## Exit codes — read them, do not chain with `&&`
@@ -200,7 +211,30 @@ from the excerpt without checking it. Review is not a formality:
 8. Land both languages in the same commit.
 
 What review actually costs, measured on the first digest: eight machine-written
-summaries, **five rewritten and one removed entirely**. None of the errors were
+summaries, **one removed entirely and all seven survivors rewritten** — zero of
+the model's sentences reached the published post in either language.
+
+🔴 This paragraph said "five rewritten" until 2026-09-04. ADR-001 corrected the
+number to 7 of 7 when it was accepted, and **this doc was not updated in the same
+pass**, so the stale figure stayed in circulation in the file an operator actually
+reads before reviewing. Recompute rather than trust either number:
+
+```bash
+node --input-type=module -e "
+import { readFileSync } from 'node:fs';
+const parse=(f)=>{const m=new Map();
+  for(const x of readFileSync(f,'utf8').matchAll(/^### \[([^\]]*)\]\(([^)]+)\)\s*\n+([\s\S]*?)(?=\n+<small>)/gm))
+    m.set(x[2],x[3].trim().replace(/\s+/g,' ')); return m;};
+const d=parse(process.argv[1]), p=parse(process.argv[2]);
+if(!d.size||!p.size) { console.log('BLIND PARSER'); process.exit(2); }  // control
+let kept=0,verbatim=0;
+for(const [l,dl] of d){ const pl=p.get(l); if(pl===undefined) continue; kept++; if(pl===dl) verbatim++; }
+console.log('kept='+kept+' cut='+(d.size-kept)+' verbatim='+verbatim);
+" <draft.mdx> <published.mdx>
+```
+
+From 2026-09-07 the pair is captured on purpose — see **The eval pair** below —
+so this stops needing git archaeology. None of the errors were
 invented facts — the numbers the model quoted all checked out. They were
 confident vagueness ("provides valuable insight into how language models learn"
 for a post about diffing published prompts) and omitted the one detail a
@@ -221,6 +255,39 @@ the dedupe memory belongs to the repo, not to one machine.
 To force a re-run of the same week, delete the two draft files and remove their
 links from `seen.json`.
 
+## The eval pair
+
+Every run that writes a draft also writes `scripts/news/editions/<date>.json` —
+the DRAFT half: each item's link, its score, the **exact 700-char excerpt the
+prompt carried**, and both model lines. That excerpt is the ground the entity
+check measures against, so the model is judged on what it was shown and not on
+material it never saw.
+
+The same run prints advisory `ENTITY_CHECK` lines for any identifier or number a
+summary asserts that its source does not, and for any identifier the PT line
+dropped. Advisory on purpose: these are drafts, a human reads every line anyway,
+and a blocking gate here would stop an edition over a token the reviewer was
+about to fix. The point is that the check is **invoked** — a check nobody runs is
+the prose it was meant to replace.
+
+After publishing (`draft: false` on both files, both committed):
+
+```bash
+node scripts/news/capture-published.mjs scripts/news/editions/<date>.json
+```
+
+It fills the published half in place, keyed by **link** rather than by position —
+a human may reorder or drop items, and matching by index would pair one item's
+prose with another's source. Two refusals matter more than the capture:
+
+- **Still a draft → exit 1, nothing written.** Recording the model's own output
+  as the human's would make every later measurement the model grading itself.
+- **Zero links matched → exit 2, a broken instrument.** "The human cut every
+  item" and "the post body shape changed" look identical otherwise.
+
+`scripts/news/editions/` is versioned. That is the whole point: an eval set that
+lives only on one machine is not an eval set.
+
 ## Configuration
 
 | env | default | purpose |
@@ -229,5 +296,5 @@ links from `seen.json`.
 | `OLLAMA_MODEL` | `llama3.2:3b` | must be pulled; the script checks and exits 2 if not |
 | `NEWS_FETCH_TIMEOUT_MS` | `20000` | per feed |
 | `NEWS_LLM_TIMEOUT_MS` | `120000` | per model call |
-| `NEWS_CONFIG` / `NEWS_SEEN` / `NEWS_POSTS_DIR` | repo paths | test-only overrides |
+| `NEWS_CONFIG` / `NEWS_SEEN` / `NEWS_POSTS_DIR` / `NEWS_EDITIONS_DIR` | repo paths | test-only overrides |
 | `NEWS_DIGEST_LOG` | `scripts/news/digest.log` | cron log location |

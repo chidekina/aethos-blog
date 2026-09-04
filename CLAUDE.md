@@ -77,9 +77,22 @@ CONTRACT.md            # machine-checked invariants; run before changing structu
 ```bash
 node scripts/news/fetch-news.mjs --dry-run        # shortlist, writes nothing
 node scripts/news/fetch-news.mjs --check-sources  # probe every feed
-bash scripts/news/fetch-news.test.sh              # 19 assertions
+bash scripts/news/fetch-news.test.sh
+bash scripts/news/check-entities.test.sh          # + .mutate.sh
+bash scripts/news/capture-published.test.sh       # + .mutate.sh
 python3 ~/.claude/hooks/contract-validate.py CONTRACT.md
 ```
+
+🔴 Assertion counts are deliberately not written here. A count in prose goes
+stale on the next commit and nothing recomputes it — run the suite.
+
+**The eval pair.** Every run that writes a draft also writes
+`scripts/news/editions/<date>.json` (tracked): the link, score, the exact
+700-char prompt excerpt, and both model lines. After publishing, fill the other
+half with `capture-published.mjs` — it REFUSES while `draft: true`, because
+recording the model's output as the human's would make every later measurement
+the model grading itself. `NEWS_EDITIONS_DIR` redirects it for tests; a suite
+that forgets to writes fixture editions into the tracked tree.
 
 🔴 `fetch-news.mjs` exit **2 is a broken instrument** (network down, Ollama
 unusable, config unreadable), never a verdict about the news. Exit 1 is a real
