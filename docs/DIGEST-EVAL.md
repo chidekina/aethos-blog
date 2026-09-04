@@ -45,11 +45,54 @@ Every proper noun and every numeric literal in a summary must appear verbatim in
 the source excerpt. No model, no eval set, no labels: it is decidable from the
 source alone.
 
-This targets the one failure actually observed in production —
-`Terminal-Bench-Science 0.1` became `Benchmark de Ciência do Terminal 0,1` in the
-PT draft. Run it on the EN summary against the source, **and on the PT summary
-against source + EN**: a translated proper noun appears in neither, which is
-exactly what makes it catchable.
+> **BUILT 2026-09-04** — `scripts/news/check-entities.mjs`, 26 assertions in
+> `check-entities.test.sh`, 4 mutations with disjoint failure sets in
+> `check-entities.mutate.sh`. Invoked by the pipeline at draft time as advisory
+> `ENTITY_CHECK` log lines, and runnable over any edition record.
+
+🔴 **RETRACTION — the failure this item was written for did not happen.** This
+section claimed `Terminal-Bench-Science 0.1` became `Benchmark de Ciência do
+Terminal 0,1` in the PT draft. Measured against that draft in git on 2026-09-04
+(`d44b785:src/content/blog/2026-09-02-radar-ai-dev-pt.mdx`, line 16):
+
+```
+O Claude Fable 5.1 alcançou um desempenho de 52,6% no Terminal-Bench-Science 0,1, …
+```
+
+The identifier survived **intact**. Only the decimal separator changed, and a
+decimal comma is correct pt-BR, not a defect. **Edition 1 has zero entity
+manglings.** Same defect class as the "5 of 8" corrected in ADR-001: a claim in
+prose that nothing re-measured — and this one had already propagated into the
+module docstring and a test-arm label before the data was read.
+
+The check is still worth its ~200 lines: it is deterministic, needs no model and
+no labels, and runs in milliseconds. But it is **prophylactic, not remedial**, and
+saying otherwise inflates what it has earned.
+
+**How it is actually wired.** Three directions, not two:
+
+| lane | question | what only it can answer |
+|---|---|---|
+| EN → source | is what the EN line asserts grounded? | invention |
+| PT → source + EN | is what the PT line asserts grounded? | invention in translation |
+| **EN → PT** | did the EN line's identifiers and numbers survive? | **deletion** |
+
+🔴 The third lane is not in the original item, and it is the only one that could
+catch the failure shape described above. A summary→source check sees INVENTION
+only: it asks whether what the summary says is grounded, never whether what the
+source said survived. With only the two grounding lanes, a translated identifier
+reads `no-tokens` on the PT side — nothing checkable, silently not a pass.
+
+**And production data broke the first version.** Run over the real edition-1
+drafts, the EN→PT lane flagged **2 of 8** items, and both were `AI` rendered as
+`IA` — the standard pt-BR form. A 25% false positive rate against a fixture suite
+that read 23/0. Fixed with an explicit `TRANSLATION_EQUIVALENTS` map whose only
+entry is the one that was measured; after it, edition 1 reports 0 findings across
+19 checked tokens (non-zero, so not a vacuous pass).
+
+> A fixture suite cannot tell you a false positive rate. It only ever tells you
+> that the cases you imagined behave as you imagined. Run a new check over real
+> historical data before believing its verdict on new data.
 
 Origin of the metric is precision-source from Nan et al., EACL 2021
 (https://aclanthology.org/2021.eacl-main.235/) — cited as provenance, not as
@@ -66,16 +109,63 @@ before review, and only by git archaeology. Nothing captures the pair on purpose
 Without it, no eval set can ever accumulate — and the per-failure labels above
 have nowhere to live.
 
-Cheap, and it is the prerequisite for everything below.
+> **BUILT 2026-09-04.** `fetch-news.mjs` writes `scripts/news/editions/<date>.json`
+> whenever a draft actually reaches disk — the draft half, carrying the exact
+> 700-char prompt excerpt the model was shown, so the ground is what it saw and
+> not more. `capture-published.mjs` fills the published half after review.
+> 15 assertions, 3 disjoint mutations.
 
-### 3. Everything else waits
+Two controls in that pair are the whole value of it:
 
-Specifically on the open ADR-001 follow-up: **does the summarization step earn
-its place at all?** Building a faithfulness judge for prose that may be deleted
-is optimizing a step that might not survive. `--no-llm` already exists to test it
-— it falls back to the raw feed excerpt (`fetch-news.mjs`, after the `useLlm`
-block), so one edition run that way answers whether a bare shortlist is harder to
-review.
+- **It refuses to run while either post still says `draft: true`** (exit 1, not 0).
+  Capturing a draft as the published line would record the model's own output as
+  the human's, and every later measurement would be the model graded against
+  itself.
+- **A parse that matches zero links is exit 2, a broken instrument.** "The human
+  cut all 8 items" and "the post body shape changed" produce identical output
+  otherwise, and the comfortable reading is the wrong one.
+
+Each item carries `keptByHuman`, and the record carries `survivedVerbatimEn` —
+the number ADR-001 turned on, recomputed per edition instead of remembered.
+
+### 3. Does the summarization step earn its place? — measured 2026-09-04
+
+The ADR-001 follow-up, run rather than argued. A full `--no-llm` edition was
+generated against the live feeds (8 items, scratch dirs, production `seen.json`
+untouched) and compared with edition 1's LLM draft and its published version.
+
+| | items | median chars | truncated mid-word |
+|---|---:|---:|---:|
+| `--no-llm` (raw feed excerpt) | 8 | 221 | **8 of 8** |
+| LLM draft (edition 1) | 8 | 212 | 0 |
+| published (human) | 7 | 366 | 0 |
+
+**The difference is not quality of prose — it is completeness.** Every `--no-llm`
+line is exactly 221 characters because the fallback is `slice(0, 220) + '…'`, so
+all eight end mid-word, and several carry feed boilerplate the model strips
+("Today is … day .", "The post …"). The LLM lines are complete sentences.
+
+So the step contributes **zero published prose** and **eight complete sentences to
+review**. Whether that is worth a local model is the operator's call, and it is
+now a call between two measured options instead of an argument.
+
+🔴 **A third option nobody had named:** the truncation is a property of the
+FALLBACK, not of the absence of a model. Cutting at a sentence or word boundary
+instead of at byte 220 would remove most of the gap for a few lines of code — and
+would make the LLM's marginal contribution smaller than this table suggests. Do
+not decide the ADR against the current fallback; it is the weakest possible
+version of the no-LLM option.
+
+🔴 **Ollama was wedged during this session** and stayed wedged: `/api/tags`
+answered instantly while `/api/generate` returned nothing in 140 s. That is the
+exact state `ollamaAlive()` exists to catch, and it is why the LLM side of the
+table comes from edition 1 rather than from a same-week run. A catalogue that
+answers is not generation that works.
+
+### 4. Everything else waits
+
+Building a faithfulness judge for prose that may be deleted is optimizing a step
+that might not survive. Item 3 above is the decision that gates it.
 
 ## Researched and rejected
 
