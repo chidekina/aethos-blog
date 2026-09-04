@@ -236,6 +236,26 @@ has "$out" "real=pass" && ! has "$out" "real=pass checked=0" \
   && ok "a reworded summary is still measured, with a non-zero token count" \
   || bad "the tautology rule swallowed a real check" "$out"
 
+echo "ARM 12 — the equivalence map is BIDIRECTIONAL, or it fixes exactly half"
+# 🔴 Order of discovery is the lesson. `ai -> ia` was added for the EN→PT lane
+# after edition 1 flagged 2 of 8. The FIRST full live LLM run then flagged `IA`
+# on the PT→source lane — the PT line says IA, the source says AI, and the map
+# only looked one way. Same root cause, opposite direction, and the one-way
+# version read as fixed for a whole session.
+out="$(run "
+const src='GPT-6 Astra from OpenAI is designed for long-horizon autonomous AI coding tasks.';
+console.log('ptToSource='+checkSummary({summary:'O GPT-6 Astra da OpenAI foi projetado para tarefas de IA autônoma.',grounds:[src]}).status);
+console.log('enToPt='+checkTranslation({summaryEn:'The AI router ships.',summaryPt:'O router de IA chega.'}).status);
+const lost=checkSummary({summary:'The CUDA kernel ships.',grounds:['A kernel ships.']});
+console.log('lost='+lost.status+' missing='+lost.missing.strong.join('|'));
+")"
+has "$out" "ptToSource=pass" && ok "IA in the PT line is grounded by AI in the source" || bad "one-way map: PT→source still false-positives" "$out"
+has "$out" "enToPt=pass" && ok "and the original EN→PT direction still holds" || bad "made it one-way the other way" "$out"
+# Both ends: an ungrounded token with no equivalent must still be caught on the
+# grounding lane, or the map has become a blanket excuse there too.
+has "$out" "lost=fail" && has "$out" "missing=CUDA" \
+  && ok "a token with no equivalent is still ungrounded" || bad "map swallowed a grounding failure" "$out"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
