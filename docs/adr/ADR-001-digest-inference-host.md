@@ -66,7 +66,8 @@ as the change, or the contract starts lying.
 
 **2. The digest writes files, and `main` is protected.** Today the generator
 writes MDX into the working tree and a human reviews and commits. A GitHub
-Actions run cannot push to `main` — protection is on with `enforce_admins`. It
+Actions run cannot push to `main`: the `gate` check is required and a bot is not
+an admin, so `enforce_admins` being off (2026-09-04) does not open that door. It
 would have to **open a pull request** carrying the drafts. That is arguably
 better (review has a natural surface) but it is new machinery, not a lift-and-shift.
 

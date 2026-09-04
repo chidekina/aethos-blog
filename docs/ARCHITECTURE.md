@@ -193,12 +193,31 @@ against a post forged to `draft: true` while still in `dist`, and refusing to
 run when the output was emptied.
 
 **`main` is protected** (since 2026-09-02): the `gate` check is required,
-branches must be up to date before merging (`strict`), force-pushes and branch
-deletion are refused, and the rule applies to admins too. Direct pushes to
-`main` are rejected — the docs-only carve-out that lets prose skip a PR does
-not survive that, and prose changes now go through a PR here like everything
-else. To lift it in an emergency:
-`gh api -X DELETE repos/chidekina/aethos-blog/branches/main/protection/enforce_admins`.
+branches must be up to date before merging (`strict`), and force-pushes and
+branch deletion are refused.
+
+**`enforce_admins` was turned OFF on 2026-09-04**, deliberately. With it on, the
+docs-only carve-out — the standing rule that a commit whose every path is prose
+may skip a PR — could not be exercised here at all, and every prose change cost a
+branch and a PR that had no behaviour to review. Restore it with:
+
+```bash
+gh api -X PUT repos/chidekina/aethos-blog/branches/main/protection/enforce_admins
+```
+
+🔴 **The mechanism is wider than the rule it restores, and that gap is the
+residual risk.** Turning off `enforce_admins` does not implement "prose may skip
+a PR"; it implements "an admin may push anything". What still holds the line is
+the **local** `pre-commit` at `~/.git-hooks/pre-commit` (v2026.08.28), which
+implements the carve-out properly: every staged path must be prose, one code file
+voids it for the whole commit, and an empty stage fails closed. This repo
+inherits it — `core.hooksPath` is unset locally, so nothing overrides the global
+hook. Its suite is 11 assertions across both ends.
+
+So the honest statement of what changed: prose now reaches `main` directly, code
+is still stopped — **by a local hook that `--no-verify` bypasses and that GitHub
+will no longer catch.** Code belongs in a PR because the rule says so, not
+because the server refuses it.
 
 Vercel's own preview deployment is a second, independent check on every PR. It
 has already caught a real defect that the local build could not: see the note on
