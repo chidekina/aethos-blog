@@ -282,6 +282,30 @@ code, pre, kbd {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ── Search ── */
+/* Visually hidden but readable by screen readers. The search input carries a
+   placeholder, and a placeholder is not an accessible name — it disappears on
+   input and some screen readers skip it entirely — so the field keeps a real
+   <label> that sighted readers do not see. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#post-search::placeholder { color: var(--color-text-muted); opacity: 1; }
+#post-search:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  border-color: var(--color-primary);
+}
+
 /* ── Responsive: mobile ── */
 @media (max-width: 640px) {
   /* Smaller post title on mobile */
