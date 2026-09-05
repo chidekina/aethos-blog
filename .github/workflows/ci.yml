@@ -73,6 +73,11 @@ jobs:
           bash scripts/news/check-entities.mutate.sh
           bash scripts/news/capture-published.mutate.sh
           bash scripts/news/excerpt.mutate.sh
+          # Last to be added, and the one that had been missing: fetch-news.mjs
+          # is the largest surface here and was the only script with a suite and
+          # no mutation harness, so its assertions had never been shown to have
+          # teeth. It runs the whole suite five times, so it is the slow step.
+          bash scripts/news/fetch-news.mutate.sh
 
       - name: Recommendations suite
         run: bash scripts/recommendations/from-issue.test.sh
