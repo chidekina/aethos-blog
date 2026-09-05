@@ -316,7 +316,17 @@ The lesson generalises past this script: **a lane that cannot fail must not repo
 a pass.** `no-tokens`, `no-ground`, `not-translated` and `tautological` are four
 different ways of having nothing to say, and all four are distinct from `pass`.
 
-## The GPU is 4 GB and two models do not fit — measured 2026-09-04
+## 🔴 RETRACTED — the two models DO fit; what varies is how long a load takes
+
+**This section's original claim was measured false on 2026-09-04.** It said a
+4096 MiB GPU "cannot hold" `llama3.2:3b` (2.8 GB) alongside `nomic-embed-text`
+(595 MB) and that ollama "waits for a slot rather than evicting". Both halves
+fell to direct measurement, and the corrected account is at the end of this
+section under **What was actually measured**. The original text is kept below
+rather than deleted, because a retraction that erases what it retracts leaves the
+next reader unable to tell which version they are holding.
+
+### The original claim, as written
 
 The digest hung for a whole session, and none of the three obvious diagnoses was
 right. Recorded because the wrong ones all *looked* right.
@@ -342,6 +352,50 @@ invisible from the obvious place to look.
 
 **A cold load with the slot free takes 7 s.** The probe budget is 30 s, so the
 timeout was never the problem and raising it only makes the hang longer.
+
+### What was actually measured — 2026-09-04, three runs plus a poll
+
+| measurement | result |
+|---|---|
+| both models resident at once | **3345 MB of 4096** — `/api/ps` listed both, `nvidia-smi` agreed at 3323 MiB |
+| load with `nomic` resident, run A | **~35 s**, and afterwards **both** were loaded — it coexisted |
+| load with `nomic` resident, run B | **4.6 s**, and afterwards only ours — it **evicted** |
+| cold load, GPU at 0 MiB | **8.7 s** |
+| `/api/ps` polled every ~0.4 s through that cold load | **empty for 8.5 s of the 8.7 s**, while the GPU climbed to 2743 MiB |
+
+Two claims fall and one stands.
+
+- ❌ *"They do not fit."* They do, with 750 MB to spare.
+- ❌ *"Ollama waits rather than evicting."* Run A coexisted, run B evicted. The
+  behaviour is **not stable between runs**, so neither verb belongs in a rule.
+- ✅ **A model being LOADED is not listed by `/api/ps` until it finishes.** That is
+  reproducible, and it is the one fact that explains what the digest saw.
+
+**So the failure signature reads differently now.** "Generation timed out AND
+`/api/ps` is empty" is a **load in progress**, not an idle server and not a wedged
+runner. And since observed loads span 4.6 s to ~35 s, a 30 s probe budget sat
+**inside** that spread — which is how an ordinary slow load became
+`RESULT=BROKEN`. `NEWS_PROBE_TIMEOUT_MS` now defaults to **60 s**.
+
+🔴 The retracted version had already reached three places before it was checked:
+this section, a comment block in `fetch-news.mjs`, and two test-arm assertions.
+It was retracted in all four in the same change — a corrected source with a stale
+derivative in circulation is worse than not correcting at all.
+
+**Recompute, and it is cheap** (the numbers above are from one machine on one
+day; VRAM pressure from other processes moves them):
+
+```bash
+ollama stop llama3.2:3b; ollama stop nomic-embed-text:latest
+nvidia-smi --query-gpu=memory.used --format=csv,noheader     # CONTROL: must be ~0
+S=$(date +%s.%N)
+curl -s localhost:11434/api/generate -H 'content-type: application/json' \
+  -d '{"model":"llama3.2:3b","prompt":"hi","stream":false}' >/dev/null
+python3 -c "print(f'{$(date +%s.%N)-$S:.1f}s')"
+# and, in a second shell DURING that call, the fact that matters:
+curl -s localhost:11434/api/ps      # empty while the GPU is already climbing
+```
+
 
 ```bash
 curl -s localhost:11434/api/ps | python3 -m json.tool   # who holds the slots
