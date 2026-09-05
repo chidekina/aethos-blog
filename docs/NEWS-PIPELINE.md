@@ -410,6 +410,59 @@ node through nvm under cron's `PATH`, fetched 2779 items, shortlisted 8, and
 wrote its `RESULT=` line. Only the diagnosis was wrong, and only a real firing
 showed it.
 
+### Rehearsing the cron entry — the procedure, and the two ways it bites
+
+`env -i PATH=/usr/bin:/bin` **simulates** cron. It does not exercise cron's
+shell, its signal handling, or the fact that a leftover line keeps firing. The
+digest entry ran for the first time on 2026-09-04 through a temporary crontab
+line, and that is the only thing that showed the diagnosis was wrong.
+
+```bash
+R=/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog
+S=$HOME/.aria/state/news-rehearsal        # DURABLE, not a session scratchpad
+mkdir -p "$S/posts" "$S/editions"
+cp "$R/scripts/news/seen.json" "$S/seen.json"
+crontab -l > "$S/crontab.backup.txt"      # BEFORE anything else
+
+# fire two minutes out; env vars inline, cron runs the line under /bin/sh
+T=$(date -d '+2 minutes' '+%M %H'); MIN=$((10#${T% *})); HR=$((10#${T#* }))
+{ cat "$S/crontab.backup.txt"; echo "# REHEARSAL-TEMP"; \
+  echo "$MIN $HR * * * NEWS_DIGEST_LOG=$S/digest.log NEWS_SEEN=$S/seen.json \
+NEWS_POSTS_DIR=$S/posts NEWS_EDITIONS_DIR=$S/editions $R/scripts/news/run-digest.sh"; \
+} | crontab -                              # STDIN — see the 99-char trap below
+
+# wait, then read the RESULT= line — never the exit code
+: > "$S/digest.log"
+bash ~/.claude/hooks/wait-for-line.sh "$S/digest.log" 'RESULT=' 600
+
+# REMOVE IT, and verify by effect with a positive control
+crontab - < "$S/crontab.backup.txt"
+crontab -l | grep -c 'REHEARSAL-TEMP'      # must be 0
+crontab -l | grep -c 'run-digest.sh'       # must be 1 — the Monday entry survived
+```
+
+🔴 **A leftover rehearsal line fires DAILY.** The removal is verified by effect,
+and the positive control is what makes the zero mean something: a `crontab -r`
+typo would also produce zero, having removed everything.
+
+🔴 **`crontab FILE` silently truncates the path at 99 characters.** Measured
+2026-09-04 on this machine — a 154-char scratchpad path came back
+`… : No such file or directory` with the printed path 99 chars long, while an
+identical file at a short path validated fine. The threshold is exact: **≤99
+works, ≥100 fails**, and the error names a missing file rather than a truncated
+argument, so it reads as "the backup is gone".
+
+| path length | `crontab -n <path>` |
+|---:|---|
+| 99 | syntax checked |
+| 100 and above | `No such file or directory` |
+
+**Use `crontab - < file`.** Stdin carries no path.
+
+🔴 And `crontab -T` does not exist here; the dry-run flag is **`-n`**. The wrong
+flag prints usage and exits 1 for *every* input, so a three-arm check with it
+returns three identical failures — a blind instrument reading as a finding.
+
 ## Configuration
 
 | env | default | purpose |
