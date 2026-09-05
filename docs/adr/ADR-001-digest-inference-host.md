@@ -191,6 +191,18 @@ honest test is to run one edition with summaries suppressed (`--no-llm` already
 exists) and see whether reviewing a bare shortlist is harder. Recorded as a
 question, not a plan — and explicitly NOT decided by this ADR.
 
+> **The test was RUN on 2026-09-04** — both editions over the same eight items,
+> links verified identical first. Results in
+> [`docs/DIGEST-EVAL.md` §3b](../DIGEST-EVAL.md): three inventions or subject
+> errors in eight, including a price wrong by a factor of a million that the
+> entity check passes because every token of it appears in the source. Two wins
+> for the model, both boilerplate-and-compression, both deterministic problems.
+>
+> **The evidence says the step does not earn its place.** What remains before
+> flipping `--no-llm` to the default is a deterministic boilerplate strip. The
+> decision is still the operator's — this note records the measurement, not a
+> change.
+
 ```bash
 grep -c 'RESULT=ok' scripts/news/digest.log
 grep -cE 'RESULT=(timeout|BROKEN)' scripts/news/digest.log

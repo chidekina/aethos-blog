@@ -203,6 +203,92 @@ exact state `ollamaAlive()` exists to catch, and it is why the LLM side of the
 table comes from edition 1 rather than from a same-week run. A catalogue that
 answers is not generation that works.
 
+### 3b. The twin editions, run — and the LLM step loses on the evidence
+
+§3 compared *artefacts* (median chars, mid-word cuts). ADR-001 asked a different
+question: **is reviewing a bare shortlist harder?** Answered 2026-09-04 by
+generating both editions over the **same eight items** — same `seen.json` copy,
+same run, links verified identical between the two before comparing anything.
+
+Item by item, reading the model's line against the raw excerpt:
+
+| | verdict |
+|---:|---|
+| 3 | 🔴 **the model invented a price** — see below |
+| 5 | 🔴 invented "improved documentation and standardized code samples", absent from the excerpt |
+| 4 | 🔴 wrong subject — the item is the `llm-gemini 0.34` plugin release; the summary announces Gemini 3.8 Flash |
+| 8 | the model replaced the source's concrete numbers (99.9% vs 30.2% vs 7.8%) with "outperforms its predecessors" |
+| 2 | the model produced a security platitude; the raw names who found it and what happened |
+| 1 | roughly equal, the summary adding "potentially enhancing … capabilities" |
+| 6 | **model better** — the raw carries feed boilerplate (`The post …`) |
+| 7 | **model better** — it lists the four patterns the raw only alludes to |
+
+Three inventions or subject errors, two losses of concrete detail, two wins for
+the model, one tie. The two model wins are both *boilerplate and compression* —
+the edge §3 already identified, and both are deterministic problems.
+
+#### 🔴 And the entity check has a measured FALSE NEGATIVE, on exactly its own class
+
+The item-3 invention, against the 700-char excerpt the model was actually shown:
+
+```
+source   … API priced at the same rate as Claude Fable 5 and 5.1:
+           $10/million input and $50/million output.
+model    … a new API model priced at $10 million for input and $50 million for
+           output …
+ENTITY_CHECK   0 ungrounded finding(s) across 8 items, 73 tokens checked
+```
+
+Ten dollars **per million tokens** became a **ten-million-dollar** price — wrong
+by a factor of a million, and semantically inverted. The PT line propagates it
+(`US$ 10 milhões para entrada`).
+
+It passes because **every token of the claim (`$`, `10`, `million`, `50`) is
+present in the source.** The check compares a *set* of tokens; the defect is in
+their *sequence*. That is a real limit, not a bug to patch casually — and it is
+worth stating plainly that the check's own motivating class, numeric fidelity, is
+where it just failed.
+
+> The reframing this forces: the entity check is a floor, not a filter. It catches
+> a token that is not in the source at all. It cannot catch a token that is there
+> in another arrangement, and arrangement is where a small model's numeric errors
+> live.
+
+**Recommendation, and the decision is the operator's** (ADR-001 recorded this as
+a question and explicitly did not settle it):
+
+- Measured contribution to published prose: **zero** (§ "The measurement that
+  reframes everything").
+- Measured cost this run: **three inventions or subject errors in eight items**,
+  one of which is a fabricated price the guard passes.
+- Measured benefit: stripping feed boilerplate and compressing — **both
+  deterministic**, and `excerpt.mjs` already does the harder half.
+- Plus the operational surface the step alone requires: a GPU, the liveness
+  probe, the probe budget, and the failure modes documented across
+  `NEWS-PIPELINE.md`.
+
+On this evidence the summarization step does **not** earn its place. What is
+left before flipping `--no-llm` to the default is a deterministic boilerplate
+strip (`The post …`, `Today is … day .`), which is a small, testable change.
+
+🔴 **Live source — recompute, do not cite these counts later.** The feeds move,
+so a rerun sees different items. The shape of the finding (invention that the
+token-set check passes) is the durable part; the 3-of-8 is one week.
+
+```bash
+R=/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog
+D=$(mktemp -d); mkdir -p $D/{a,b}/{posts,ed}
+cp $R/scripts/news/seen.json $D/a/seen.json     # SAME seen in both, or the
+cp $R/scripts/news/seen.json $D/b/seen.json     # shortlists diverge silently
+NEWS_SEEN=$D/a/seen.json NEWS_POSTS_DIR=$D/a/posts NEWS_EDITIONS_DIR=$D/a/ed \
+  node $R/scripts/news/fetch-news.mjs
+NEWS_SEEN=$D/b/seen.json NEWS_POSTS_DIR=$D/b/posts NEWS_EDITIONS_DIR=$D/b/ed \
+  node $R/scripts/news/fetch-news.mjs --no-llm
+# CONTROL: the two must cover the SAME links, or you are comparing two editions
+diff <(grep -oE 'https?://[^)]+' $D/a/posts/*[!t].mdx | sort) \
+     <(grep -oE 'https?://[^)]+' $D/b/posts/*[!t].mdx | sort) && echo "same items"
+```
+
 ### 4. Everything else waits
 
 Building a faithfulness judge for prose that may be deleted is optimizing a step
