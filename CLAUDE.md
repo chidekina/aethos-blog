@@ -101,15 +101,16 @@ recording the model's output as the human's would make every later measurement
 the model grading itself. `NEWS_EDITIONS_DIR` redirects it for tests; a suite
 that forgets to writes fixture editions into the tracked tree.
 
-🔴 **The digest hanging is usually a GPU SLOT, not a wedged runner.** The card is
-4 GB; `llama3.2:3b` needs 2.8 GB at ctx 4096 and `nomic-embed-text` holds 595 MB,
-and ollama **waits** for a slot rather than evicting. The runner sits at
-`{"status":2,"progress":0}` forever and `ollama ps` does not list it. Stopping
-llama3.2 does nothing — stop the OTHER model. A cold load with the slot free is
-**7 s**, so the 30 s probe budget is not the issue. `curl -s localhost:11434/api/ps`
-names the holder **when there is one listed** — an EMPTY `/api/ps` identifies no
-cause at all, because a queued load is invisible there by construction, and the
-digest now says so instead of guessing. Full measurement in `docs/NEWS-PIPELINE.md`.
+🔴 **An empty `/api/ps` beside a timed-out probe is a LOAD IN PROGRESS.** A model
+being loaded is not listed there until it finishes — measured 2026-09-04, empty
+for 8.5 s of an 8.7 s cold load while the GPU already read 2743 MiB. Observed
+load times span **4.6 s to ~35 s**, so `NEWS_PROBE_TIMEOUT_MS` is 60 s; 30 s sat
+inside the spread and turned a slow load into `RESULT=BROKEN`.
+🔴 **RETRACTED in the same measurement:** the earlier claim that llama3.2:3b and
+nomic-embed-text "do not fit" on this 4 GB card and that ollama "waits for a slot
+rather than evicting". They coexist at **3345 MB of 4096**, one run evicted and
+another did not — the behaviour is not stable, so neither verb is a rule. Full
+measurement, with the recompute, in `docs/NEWS-PIPELINE.md`.
 
 🔴 `fetch-news.mjs` exit **2 is a broken instrument** (network down, Ollama
 unusable, config unreadable), never a verdict about the news. Exit 1 is a real
