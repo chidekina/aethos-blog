@@ -38,9 +38,18 @@ const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2:3b';
 const FETCH_TIMEOUT_MS = Number(process.env.NEWS_FETCH_TIMEOUT_MS ?? 20000);
 const LLM_TIMEOUT_MS = Number(process.env.NEWS_LLM_TIMEOUT_MS ?? 120000);
-// Budget for the liveness probe only. Generation of a single token on a warm
-// runner is ~1s here; a wedged one never answers at all, so this can be short.
-const PROBE_TIMEOUT_MS = Number(process.env.NEWS_PROBE_TIMEOUT_MS ?? 30000);
+// Budget for the liveness probe only. A single token on a WARM runner is ~1 s;
+// the budget exists for the COLD case, where the model must be loaded first.
+//
+// 🔴 60 s, not 30 s, and the change is measured rather than padded. Three loads
+// timed on this machine on 2026-09-04: 4.6 s (blob warm, another model resident
+// and evicted), 8.7 s (cold, GPU free), and ~35 s (another model resident and
+// kept — they coexist at 3345 MB of 4096). A 30 s budget sits INSIDE that
+// spread, so it converts an ordinary slow load into `RESULT=BROKEN`, which is
+// exactly what the weekly digest reported. The cost of 60 s is that a genuinely
+// dead server takes a minute to say so, once a week, in a job nobody watches
+// live.
+const PROBE_TIMEOUT_MS = Number(process.env.NEWS_PROBE_TIMEOUT_MS ?? 60000);
 
 const argv = process.argv.slice(2);
 // An unknown flag is a BROKEN INSTRUMENT, not a no-op. Measured 2026-09-02: a
@@ -223,15 +232,21 @@ async function ollamaAlive() {
       await gres.json();
     } catch (err) {
       if (err.name !== 'AbortError') return { ok: false, reason: `generate probe failed — ${err.message}` };
-      // 🔴 The old message said "the runner is wedged, clear it with
-      // `ollama stop <our model>`" and that advice is WRONG for the cause we
-      // actually hit. Measured 2026-09-04 on this machine: a 4096 MiB GPU cannot
-      // hold llama3.2:3b (2.8 GB at ctx 4096) alongside nomic-embed-text
-      // (595 MB), and ollama WAITS for a slot rather than evicting. The runner
-      // spawns, answers /health with {"status":2,"progress":0}, and sits there
-      // forever. Stopping OUR model does nothing — the model to stop is the
-      // OTHER one. A cold load with the slot free takes 7 s, so the timeout is
-      // not the problem and raising it would only make the hang longer.
+      // 🔴 RETRACTED, and the retraction is the point. This block used to say
+      // that a 4096 MiB GPU "cannot hold" llama3.2:3b (2.8 GB) alongside
+      // nomic-embed-text (595 MB) and that ollama "waits for a slot rather than
+      // evicting". Both were measured false on 2026-09-04:
+      //
+      //   the two coexist          3345 MB of 4096, both listed in /api/ps
+      //   eviction does happen     a later run evicted nomic and loaded in 4.6 s
+      //   load times observed      4.6 s, 8.7 s, ~35 s — it VARIES per run
+      //
+      // What is stable, and what actually explains the failure this code
+      // reports: a model being LOADED is not listed by /api/ps at all. Measured
+      // by polling during a cold load — empty for 8.5 s of the 8.7 s, while the
+      // GPU had already climbed to 2743 MiB. So "generation timed out AND
+      // /api/ps is empty" is the signature of a load in progress, not of an idle
+      // server and not of a wedged runner.
       // 🔴 An EMPTY /api/ps is not evidence of an idle server, and the branch
       // below used to read it as one — it said "genuinely wedged runner, stop
       // <our model>". Measured 2026-09-04 on a cron rehearsal that produced
@@ -246,22 +261,26 @@ async function ollamaAlive() {
       const holders = await loadedModels();
       const others = holders.models.filter((m) => m.name !== OLLAMA_MODEL);
       const discriminate =
-        `To tell them apart: \`curl -s ${OLLAMA_URL}/api/ps\` names any holder, and a cold load with the ` +
-        `slot free takes ~8 s here — so a probe outliving ${PROBE_TIMEOUT_MS}ms with nothing listed points ` +
-        `at the card having been occupied, not at the budget being short. Raising the budget lengthens the ` +
-        `hang without changing the outcome.`;
+        `To separate a slow load from a dead server, re-run the probe by hand and WATCH: ` +
+        `\`curl -s ${OLLAMA_URL}/api/generate -d '{"model":"${OLLAMA_MODEL}","prompt":"hi","stream":false}'\` ` +
+        `alongside \`nvidia-smi --query-gpu=memory.used --format=csv\`. VRAM climbing while /api/ps stays ` +
+        `empty is a load running; VRAM flat at zero for a minute is not.`;
       const detail = !holders.queried
         ? `/api/ps could NOT be read (${holders.why}), so the holder is unknown. An unreadable instrument ` +
           `is not an empty one; this is not evidence that nothing is loaded. ${discriminate}`
         : holders.models.length === 0
-          ? `/api/ps reports nothing loaded, and that does not identify the cause — a load queued waiting ` +
-            `for a slot is invisible there by construction, so a wedged runner and a card that was held ` +
-            `and released read the same. ${discriminate}`
+          ? `/api/ps is empty, which most likely means a LOAD IS IN PROGRESS: a model being loaded is ` +
+            `not listed there until it finishes (measured — empty for 8.5 s of an 8.7 s cold load, with ` +
+            `the GPU already at 2743 MiB). Loads on this machine have taken 4.6 s, 8.7 s and ~35 s, so a ` +
+            `probe outliving ${PROBE_TIMEOUT_MS}ms points at a slow load rather than a dead server. ${discriminate}`
           : others.length === 0
             ? `Only ${OLLAMA_MODEL} is loaded, so it is wedged rather than blocked: \`ollama stop ${OLLAMA_MODEL}\`.`
-            : `GPU slots are held by ${others.map((m) => `${m.name} (${m.gb} GB)`).join(', ')}. ` +
-              `On a small GPU ollama waits for a slot instead of evicting, so the fix is to free the OTHER model: ` +
-              `${others.map((m) => `\`ollama stop ${m.name}\``).join(' ')} — stopping ${OLLAMA_MODEL} would do nothing.`;
+            : `VRAM is occupied by ${others.map((m) => `${m.name} (${m.gb} GB)`).join(', ')}. That does NOT ` +
+              `mean the load cannot happen — measured 2026-09-04, the two coexist at 3345 MB of 4096 and ollama ` +
+              `sometimes evicts instead. What it costs is TIME: the slowest load observed with another model ` +
+              `resident was ~35 s against 8.7 s cold with the card free. Either free it ` +
+              `(${others.map((m) => `\`ollama stop ${m.name}\``).join(' ')}) or raise NEWS_PROBE_TIMEOUT_MS. ` +
+              `Stopping ${OLLAMA_MODEL} is not the fix — it is not loaded.`;
       return {
         ok: false,
         reason: `catalogue answers but generation did not respond within ${PROBE_TIMEOUT_MS}ms. ${detail}`,

@@ -384,8 +384,16 @@ kill "$P16" 2>/dev/null
 [ "$ST16" = 2 ] && ok "a blocked load is still exit 2" || bad "blocked load exit $ST16" "$OUT16"
 has "$OUT16" "ollama stop nomic-embed-text:latest" \
   && ok "the log names the OTHER model as the one to stop" || bad "log does not name the blocker" "$OUT16"
-has "$OUT16" "stopping llama3.2:3b would do nothing" \
+has "$OUT16" "Stopping llama3.2:3b is not the fix" \
   && ok "and says plainly that stopping ours would not help" || bad "the misleading advice survives" "$OUT16"
+# 🔴 The message must NOT claim the load is impossible. Measured 2026-09-04: the
+# two models coexist at 3345 MB of 4096, and a later run evicted instead. What
+# occupancy costs is TIME (~35 s against 8.7 s cold with the card free), so the
+# message offers raising the budget as well as freeing the card.
+has "$OUT16" "does NOT" \
+  && ok "and does not claim the load is impossible" || bad "occupancy reported as impossibility" "$OUT16"
+has "$OUT16" "NEWS_PROBE_TIMEOUT_MS" \
+  && ok "and names the budget as the other lever" || bad "only one lever offered" "$OUT16"
 
 # Both ends. With only OUR model loaded the advice must flip back, otherwise
 # the new branch is just a different fixed string.
@@ -408,13 +416,16 @@ has "$OUT16B" "wedged rather than blocked" \
   && ok "only-ours-loaded flips the advice back to stopping ours" || bad "advice did not adapt" "$OUT16B"
 has "$OUT16B" "nomic" && bad "it named a model that is not loaded" "$OUT16B" || ok "and it invents no blocker that is not there"
 
-echo "ARM 17 - an EMPTY /api/ps names both hypotheses and picks neither"
+echo "ARM 17 - an EMPTY /api/ps is a LOAD IN PROGRESS, and says so with its mechanism"
 # The third reading of /api/ps, and the one that produced RESULT=BROKEN on the
-# 2026-09-04 cron rehearsal: the endpoint answers 200 with an empty list. A load
-# queued waiting for a slot is invisible there BY CONSTRUCTION, so this reading
-# is produced both by a genuinely wedged runner and by a card that was held and
-# released. Naming one is a guess; the old code named the one whose fix cannot
-# work.
+# 2026-09-04 cron rehearsal: the endpoint answers 200 with an empty list.
+#
+# Measured the same day by polling /api/ps every ~0.4 s through a cold load: it
+# read EMPTY for 8.5 s of the 8.7 s, while the GPU climbed to 2743 MiB. A model
+# being loaded is simply not listed until it finishes. So an empty list beside a
+# timed-out generation probe is a LOAD IN PROGRESS — and since observed loads
+# here range 4.6 s to ~35 s, a 30 s budget sat inside that spread. The budget is
+# now 60 s and the message says which of the two it is looking at.
 OP17=$(( 20000 + RANDOM % 20000 ))
 node -e '
 const http=require("http");
@@ -432,10 +443,10 @@ OUT17="$(OLLAMA_URL="http://127.0.0.1:$OP17" NEWS_PROBE_TIMEOUT_MS=2000 \
   run "$T/c1.json" "$T/seen17.json" "$T/posts17")"; ST17=$?
 kill "$P17" 2>/dev/null
 [ "$ST17" = 2 ] && ok "an empty ps is still exit 2" || bad "empty ps exit $ST17" "$OUT17"
-has "$OUT17" "does not identify the cause" \
-  && ok "the log says plainly that the reading identifies no cause" || bad "it still picks a cause" "$OUT17"
-has "$OUT17" "invisible there by construction" \
-  && ok "and names WHY the reading is ambiguous, not just that it is" || bad "ambiguity asserted without its mechanism" "$OUT17"
+has "$OUT17" "LOAD IS IN PROGRESS" \
+  && ok "the log names the reading a load in progress" || bad "it still picks the wrong cause" "$OUT17"
+has "$OUT17" "not listed there until it finishes" \
+  && ok "and names the MECHANISM that makes an empty list mean that" || bad "claim asserted without its mechanism" "$OUT17"
 has "$OUT17" "ollama stop llama3.2:3b" \
   && bad "it still sends the operator to stop the model that stopping cannot help" "$OUT17" \
   || ok "and does not prescribe the fix that measurement refuted"

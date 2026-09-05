@@ -58,15 +58,16 @@ PY
 
 RC=0
 
-echo "M1 — the empty /api/ps branch goes back to naming a cause"
+echo "M1 — the empty /api/ps branch goes back to the retracted 'wedged runner' claim"
 # The exact string the cron rehearsal printed, and the one whose prescribed fix
 # measurement had already refuted.
 mutate "M1 empty ps asserts 'genuinely wedged'" \
-  '        ? `/api/ps reports nothing loaded, and that does not identify the cause — a load queued waiting ` +
-            `for a slot is invisible there by construction, so a wedged runner and a card that was held ` +
-            `and released read the same. ${discriminate}`' \
+  '        ? `/api/ps is empty, which most likely means a LOAD IS IN PROGRESS: a model being loaded is ` +
+            `not listed there until it finishes (measured — empty for 8.5 s of an 8.7 s cold load, with ` +
+            `the GPU already at 2743 MiB). Loads on this machine have taken 4.6 s, 8.7 s and ~35 s, so a ` +
+            `probe outliving ${PROBE_TIMEOUT_MS}ms points at a slow load rather than a dead server. ${discriminate}`' \
   '        ? `Nothing is reported loaded, so this looks like a genuinely wedged runner: \`ollama stop ${OLLAMA_MODEL}\`.`' \
-  "it still picks a cause" || RC=1
+  "it still picks the wrong cause" || RC=1
 
 echo "M2 — loadedModels collapses 'could not read' back into 'read, and empty'"
 mutate "M2 unreadable ps reads as empty" \
@@ -89,7 +90,7 @@ echo "M4 — the holder filter stops excluding our own model"
 mutate "M4 our model counts as its own blocker" \
   "const others = holders.models.filter((m) => m.name !== OLLAMA_MODEL);" \
   "const others = holders.models.filter(() => true);" \
-  "advice did not adapt" || RC=1
+  "advice did not adapt" || RC=1   # ARM 16B: with only ours loaded the advice must flip back
 
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
