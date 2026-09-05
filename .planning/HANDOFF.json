@@ -1,156 +1,47 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T22:35:00.000Z",
+  "timestamp": "2026-09-04T23:10:00.000Z",
   "context": "default",
   "phase": null,
-  "phase_name": "no GSD phase — this repo has no .planning/config.json; work was tracked in STATE.md",
+  "phase_name": "no GSD phase — this repo has no .planning/config.json; state lives in .continue-here.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "43eb3731368bb626c4618b9acb7c489ed6552e91",
+  "head": "786b7c4b24b0b2560ba7e8d197a599fdd7bac531",
   "head_matches_remote": true,
   "working_tree_clean": true,
+  "head_note": "The SHA at the moment this file was WRITTEN, one commit behind the commit that carries it — a handoff cannot record its own commit. Verify with `git -C <repo> rev-parse HEAD`, never by trusting this field.",
   "completed_this_session": [
-    {
-      "name": "Entity/number preservation check — three lanes, the third catches DELETION",
-      "pr": 22,
-      "commit": "dbcc758"
-    },
-    {
-      "name": "Edition record: the draft half, with the exact prompt excerpt",
-      "pr": 22,
-      "commit": "8f455e2"
-    },
-    {
-      "name": "CI runs both new suites AND both mutation harnesses",
-      "pr": 22,
-      "commit": "7cf7707"
-    },
-    {
-      "name": "Retracted the failure item 1 was built for, and the 'five rewritten' that outlived ADR-001",
-      "pr": 22,
-      "commit": "36d37f1"
-    },
-    {
-      "name": "Chip Huyen added to sources.json — 37/37 feeds reachable",
-      "pr": 23,
-      "commit": "53a57e9"
-    },
-    {
-      "name": "Boundary excerpt trim — the unbuilt third option of ADR-001; 8 of 8 mid-word -> 0 of 8",
-      "pr": 24,
-      "commit": "3fb5b18"
-    },
-    {
-      "name": "Four ways of having nothing to say, none of them a pass (tautological/no-ground/broken-on-absent-key)",
-      "pr": 24,
-      "commit": "0144d52"
-    },
-    {
-      "name": "ENTITY_CHECK VACUOUS instead of a reassuring zero under --no-llm",
-      "pr": 24,
-      "commit": "7881d60"
-    },
-    {
-      "name": "Edition 1 backfilled into the eval set — 7 kept, 1 cut, 0 verbatim",
-      "pr": 24,
-      "commit": "fe52dd0"
-    },
-    {
-      "name": "Ollama diagnosed and cleared — GPU slot contention, not a wedged runner",
-      "pr": 25,
-      "commit": "14ed844"
-    },
-    {
-      "name": "Probe names the model HOLDING the slot instead of telling you to stop ours",
-      "pr": 25,
-      "commit": "14ed844"
-    },
-    {
-      "name": "Equivalence map made bidirectional — a one-way fix had read as done",
-      "pr": 26,
-      "commit": "b174a72"
-    },
-    {
-      "name": "Mutation harnesses no longer report a ten-assertion kill as SURVIVED",
-      "pr": 26,
-      "commit": "17f9a2a"
-    }
+    "Fired the weekly cron entry for real for the first time. It had only ever been verified with `env -i PATH=/usr/bin:/bin`, which reproduces one variable of cron's environment and not the firing. It returned RESULT=BROKEN.",
+    "PR #27 (merged): loadedModels() returned [] for three distinct states — nothing loaded, /api/ps non-200, /api/ps unreachable — so an unreadable reader and an empty subject were the same value. It now returns `queried` separately from the list.",
+    "PR #28 (merged): reproduced the scenario instead of reasoning about it, and RETRACTED two claims this repo had documented. Established the one that stands.",
+    "fetch-news.mutate.sh: fetch-news.mjs was the only script in scripts/news/ with a suite and no mutation harness, and the largest surface there. Four mutations, each killing a named arm, MUTATE_EXIT=0, now running in CI. Suite 66 -> 68.",
+    "docs/NEWS-PIPELINE.md gained the cron rehearsal procedure, with the crontab 99-character path truncation measured (99 works, 100 fails) and the -n/-T flag trap.",
+    "docs/DIGEST-EVAL.md §3b: the twin editions were generated over the SAME eight items, answering ADR-001's follow-up with data rather than argument."
   ],
+  "measured_retractions": {
+    "the two models do not fit on a 4 GB card": "FALSE — they coexist at 3345 MB of 4096, both listed in /api/ps, nvidia-smi agreeing at 3323 MiB",
+    "ollama waits for a slot rather than evicting": "FALSE as a rule — one run coexisted (~35 s), another evicted (4.6 s); the behaviour is not stable between runs",
+    "a cold load is always ~7 s so the probe budget is never the problem": "FALSE — observed loads span 4.6 s to ~35 s, and the budget was 30 s, inside that spread"
+  },
+  "measured_established": "A model being LOADED is not listed by /api/ps until it finishes — empty for 8.5 s of an 8.7 s cold load while the GPU already read 2743 MiB. So 'generation timed out AND /api/ps empty' is a load in progress, not an idle server and not a wedged runner. This closes the 20:47 attribution the previous handoff left open.",
   "remaining_tasks": [
-    {
-      "name": "Review the first cron-produced digest",
-      "context": "Monday 2026-09-07 08:00. Read the RESULT= line, not the exit code; no RESULT= line is a third state. Ollama is WORKING — rehearsed end to end today: full run with the model, exit 0, 8 drafts, 78 tokens checked, 0 findings. If it hangs again the cause is the GPU slot: curl -s localhost:11434/api/ps names the holder and you stop the OTHER model, never llama3.2. After publishing run capture-published.mjs on the edition record. RE-PROBED at pause 2026-09-04T22:35Z: generate returns OK, llama3.2:3b loaded, 2743 of 4096 MiB used, keep_alive 4 min from expiry so Monday gets a cold load (7 s, inside the 30 s probe). The standoff CAN still recur: if nomic-embed-text is loaded at 08:00, llama3.2 may block again — but the digest now exits 2 naming nomic as the model to stop."
-    },
-    {
-      "name": "Decide ADR-001's follow-up: does the summarization step earn its place?",
-      "context": "Comparison is now fair (mid-word 8 of 8 -> 0 of 8 after the boundary trim). What remains of the LLM's edge is stripping feed boilerplate and compressing rather than truncating. DIGEST-EVAL section 3. Nothing blocks this but a decision."
-    }
+    "Monday 2026-09-07 08:00: the first cron-produced digest. Gated on the clock. Read the RESULT= line, never the exit code — and a log with NO RESULT= line is a third state (ran, never finished).",
+    "Decide whether to flip --no-llm to the default. Evidence is complete in docs/DIGEST-EVAL.md §3b: three inventions or subject errors in eight items against two wins for the model, both wins deterministic problems. Blocked only on a boilerplate strip. Operator decision — changing a published pipeline's default is not mine to make.",
+    "Build a sequence-aware numeric check. The entity check has a measured false negative on its own motivating class: '$10/million input' became '$10 million for input', and it reported 0 findings across 73 tokens, because every token of the claim is in the source. It compares a token SET; the defect is in the SEQUENCE."
   ],
   "blockers": [],
   "human_actions_pending": [
-    {
-      "action": "Decide ADR-001 follow-up",
-      "context": "DIGEST-EVAL section 3 carries the fair table.",
-      "blocking": false
-    },
-    {
-      "action": "Optional: OLLAMA_MAX_LOADED_MODELS=1 in the ollama service",
-      "context": "Makes ollama evict rather than wait, removing the GPU-slot standoff for good. Needs root; changes behaviour for every ollama client on the machine. Not applied.",
-      "blocking": false
-    }
+    "Merging. `gh pr merge` is refused by this harness's auto-mode classifier and is allowed only after the operator asks for that specific merge by name — measured twice today. There is no workaround worth finding.",
+    "The --no-llm default decision above."
   ],
   "decisions": [
-    {
-      "decision": "TRANSLATION_EQUIVALENTS carries only MEASURED entries",
-      "rationale": "One today, AI->IA, from 2 false positives in 8 real items. An allowlist grown by guessing is a place to hide real failures."
-    },
-    {
-      "decision": "The entity check is advisory, never blocking",
-      "rationale": "These are drafts and a human reads every line; a blocking gate would stop an edition over a token the reviewer was about to fix. What matters is that it is INVOKED."
-    },
-    {
-      "decision": "capture-published refuses while draft: true (exit 1), and zero matched links is exit 2",
-      "rationale": "Recording the model's output as the human's would make every later measurement the model grading itself; and 'the human cut every item' vs 'the body shape changed' are otherwise identical."
-    },
-    {
-      "decision": "scripts/news/editions/ is tracked",
-      "rationale": "An eval set that lives on one machine is not an eval set."
-    },
-    {
-      "decision": "PR #22 merged by rebase, not squash",
-      "rationale": "Squashing would collapse it back into the single 1181-line commit the local pre-commit gate rejected for mixed concerns."
-    },
-    {
-      "decision": "Stay on local Ollama (ADR-001 Accepted)",
-      "rationale": "Unchanged. The model contributed 0 of 7 published sentences; a hosted API would buy quality in the discarded step."
-    },
-    {
-      "decision": "A lane that cannot fail must not report a pass",
-      "rationale": "tautological, no-ground, not-translated and no-tokens are four different ways of having nothing to say. --no-llm logged '0 findings, 42 tokens checked' where none of the 42 could have been missing."
-    },
-    {
-      "decision": "null and undefined do not collapse in an edition record",
-      "rationale": "null is declared absence (backfilled edition, feeds gone); an absent key silently degraded the ground to the headline and produced a confident `fail` on a faithful summary."
-    },
-    {
-      "decision": "Edition 1 backfilled with sourceExcerpt: null rather than a reconstructed excerpt",
-      "rationale": "Inventing one would produce a confident verdict about text the model never saw — the exact failure the file exists to avoid."
-    },
-    {
-      "decision": "An equivalence map must be bidirectional",
-      "rationale": "ai->ia fixed the EN->PT lane and left PT->source false-positiving. A one-way fix reads as done and survived a whole session."
-    },
-    {
-      "decision": "Mutation harnesses test for green with a regex, never a fixed string",
-      "rationale": "`grep -qF \\\"0 failed\\\"` matches \\\"10 failed\\\". Under-reporting is the bad direction: it sends you to add assertions that already exist."
-    },
-    {
-      "decision": "OLLAMA_MAX_LOADED_MODELS not set",
-      "rationale": "It is the durable fix for the slot standoff but needs root and changes behaviour for every other ollama client on the machine. Named rather than decided by omission."
-    }
+    "NEWS_PROBE_TIMEOUT_MS 30 s -> 60 s, because observed loads reach ~35 s. Cost named: a genuinely dead server takes a minute to say so, once a week, in a job nobody watches live.",
+    "OLLAMA_MAX_LOADED_MODELS=1 CLOSED as unjustified, not deferred — it fixes a behaviour that does not exist as described, needed root, and would have changed behaviour for every ollama client on this machine.",
+    "Retractions keep visible what they retract. The original GPU section sits above its correction; the refuted claim had reached four places and all four were corrected in the same change.",
+    "The suite caps NEWS_LLM_TIMEOUT_MS as a fail-fast guarantee: no arm needs the real model, and without it a mutation that let a wedged server through ran the harness past 600 s.",
+    "The entity check stays advisory. §3b makes that case stronger, not weaker — a check with a known false negative must not be the thing that clears an edition."
   ],
   "uncommitted_files": [],
-  "next_action": "Nothing in flight and nothing blocked. Monday 2026-09-07: review the first cron digest — Ollama works and the run was rehearsed end to end today. The other open item is ADR-001's follow-up, now a fair comparison awaiting a decision.",
-  "context_notes": "Fourteen commits across five PRs (#22-#26), CI green on each, production smoked, and the Monday run rehearsed end to end with the model. Two through-lines. First: every gate shipped earlier in the session reported CLEAN somewhere it had no power to fail — a --no-llm run logged '0 findings, 42 tokens checked' where none of the 42 could have been missing. Second, and it kept recurring: a fix that addresses one direction reads as finished. The equivalence map fixed EN->PT and left PT->source broken; the ADR-001 comparison measured the LLM against the worst possible fallback; the mutation harness matched '10 failed' as '0 failed' and under-reported its own teeth. And three confident diagnoses of the Ollama hang were each wrong — stale runner, corrupt blob, embedding saturation — before the arithmetic showed 2.8 GB plus 595 MB on a 4 GB card. Everything here was found by running an instrument against real data or by mutating it. Nothing by re-reading it. Post-handoff, one more of the same family: a scan for leaked fixture servers matched ITSELF — `pgrep -f 'node -e'` hit the shell running the loop, because the loop's own text contained the pattern. A new PID appeared at every look and the kill took down my own command. Real leaked servers: zero. Scan by /proc/<pid>/comm, never by command text, and print the positive control beside the zero.",
-  "head_note": "The SHA at the moment this file was WRITTEN, one commit behind the commit that carries it — a handoff cannot record the SHA of its own commit. Observed THREE times now (7ddea0f/f334b73, then 9fec753/43eb373). Trust `git rev-parse HEAD`, always."
+  "next_action": "Confirm state rather than trusting this file — the commands are in .planning/.continue-here.md under <next_action>. If Monday has not passed, remaining task 2 is the useful work and needs no digest run.",
+  "context_notes": "One through-line, and it is the same one the previous handoff recorded from the other side: a fix that addresses one direction reads as finished, and an instrument that cannot fail reads as a pass. This session the instrument was my own reasoning. I explained the cron failure three times without reproducing it — 'wedged runner', then 'GPU standoff', then 'identifies no cause' — and each was written into code, tests and docs before the next one refuted it. What finally settled it was loading a model while polling /api/ps every 0.4 s: the list is empty for the whole load. Two claims this repo had carried as measured fact fell in the same experiment, including one I had documented FURTHER earlier in the same session. Secondary instances, all caught by controls rather than by care: a suite read 59 assertions instead of 66 because I had switched to main; a grep for 'LOAD IN PROGRESS' returned 0 because the string is 'LOAD IS IN PROGRESS'; a production smoke returned 000 for three URLs including the control because I invented the hostname; a three-arm crontab measurement returned three identical failures because the -T flag does not exist here. In every one, the zero looked like a finding and was a blind instrument. The rule that earned its keep: print the positive control beside the zero, in the same run."
 }
