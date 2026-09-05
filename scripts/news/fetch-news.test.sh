@@ -77,7 +77,16 @@ run() { # env-isolated invocation of the real script
   # record writer left scripts/news/editions/2026-09-04.json in the tree,
   # carrying example.test links. A suite's side effects are invisible to the
   # suite by construction; only an outside `git status` shows them.
+  #
+  # 🔴 NEWS_LLM_TIMEOUT_MS is capped here, and it is a fail-FAST guarantee rather
+  # than a convenience. Every Ollama arm in this suite points at a 127.0.0.1 stub
+  # and no arm needs the real model, so the production 120 s budget buys nothing.
+  # What it costs is measured: a mutation that let a wedged server read as alive
+  # sent the pipeline on to real generation, 16 calls x 120 s per arm, and the
+  # mutation harness ran past 600 s without finishing. A guard whose failure
+  # takes ten minutes to show gets read as "CI is slow", not as a regression.
   NEWS_CONFIG="$1" NEWS_SEEN="$2" NEWS_POSTS_DIR="$3" NEWS_EDITIONS_DIR="$T/editions" \
+  NEWS_LLM_TIMEOUT_MS="${NEWS_LLM_TIMEOUT_MS:-1500}" \
     node "$SCRIPT" "${@:4}" 2>&1
 }
 
