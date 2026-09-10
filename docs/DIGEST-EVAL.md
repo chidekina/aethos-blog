@@ -454,8 +454,28 @@ The decision is not reversed on it: n=1 against n=1, and edition 1's zero was
 itself a single edition. It is recorded because the alternative is a document
 arguing from the half of the evidence that agrees with it — and because the
 three lines that DID need rewriting in edition 2 were an invented attribution,
-an invented claim, and a paragraph written from a greeting, which is the failure
+a shape error, and a paragraph written from a greeting, which is the failure
 class this section is about, not the survival rate.
+
+🔴 **The middle one was filed as an invention and is not one.** The handoff and
+an earlier draft of this line both called *"addressing competition"* invented.
+The source excerpt reads `onde o ai-memory chegou frente à concorrência` — the
+competition is in the ground. The model narrowed *positioning against* into
+*addressing*, which is the §3c shape class no grounding check can catch, and a
+different defect from writing a name that appears nowhere. Counting it as an
+invention put three items in a column that holds two.
+
+```bash
+node -e "const r=require('./scripts/news/editions/2026-09-10.json');
+  const i=r.items.find(x=>/AI-MEMORY/.test(x.title));
+  console.log('competition in ground:', /concorr|competition/i.test(i.sourceExcerpt));
+  console.log('CONTROL, must be false:', /zzz-not-in-any-excerpt/i.test(i.sourceExcerpt));"
+```
+
+🔴 The record that command reads lands with the edition-2 publication branch. On
+a tree without it the command fails with MODULE_NOT_FOUND — an absent file, not
+a refuted claim. Verified true against the record itself: `true`, with the
+control line `false` in the same run.
 
 🔴 **Reversing this is one flag, and should follow a measurement the same way
 flipping it did.** The comparison to make is on a real edition with the strip
