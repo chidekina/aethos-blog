@@ -160,6 +160,80 @@ logged `DIGEST_OK ... drafts written`. It now logs `NOTHING_WRITTEN` and exits
 1. That was exactly the false-green this pipeline exists to avoid, sitting in
 the pipeline itself.
 
+## Two model steps, two flags (decided 2026-09-09)
+
+```bash
+node scripts/news/fetch-news.mjs                 # deterministic EN, translated PT — the DEFAULT
+node scripts/news/fetch-news.mjs --llm-summary   # let the model write the EN line
+node scripts/news/fetch-news.mjs --no-translate  # skip the PT translation
+node scripts/news/fetch-news.mjs --llm           # both, the old meaning
+node scripts/news/fetch-news.mjs --no-llm        # neither, the old meaning
+```
+
+Evidence and the decision are in `DIGEST-EVAL.md` §3–§3d. Short version: the
+measured case against the model is entirely about **summarisation**; there is no
+such record against **translation**, and removing it left 94 of 94 PT lines
+byte-identical to their EN lines — the Portuguese edition, in English.
+
+🔴 **The two halves fail differently.** `--llm-summary` with no usable model
+**exits 2** — you asked for it, and quietly handing back excerpts is the opposite
+of what you asked. Translation alone **degrades and says so**: a weekly draft in
+one language beats no draft, but a quietly monolingual one is worse than nothing
+because it reads as translated.
+
+**Reading a weekly log, this is the line that matters:**
+
+```bash
+grep 'TRANSLATED' scripts/news/digest.log | tail -3      # printed EVERY run, good or bad
+grep -c 'TRANSLATION UNAVAILABLE' scripts/news/digest.log
+```
+
+`TRANSLATED n/m` is printed on the successful run too, deliberately: a line that
+only appears on failure is a line nobody has learned to look for. `n` short of
+`m` means that many PT lines are COPIES of the EN line — **do not publish that
+draft as-is**.
+
+Per item, the edition record carries `translated`. It is what was *attempted*;
+`summaryPt !== summaryEn` is what came *out*. They answer different questions
+and a short line can survive translation unchanged, so the record keeps both.
+
+## Recomputing the boilerplate corpus
+
+Every frequency in `excerpt.mjs` and in `DIGEST-EVAL.md` §3c was measured on a
+wide corpus pulled through the **real** pipeline. Feeds change, so recompute
+before trusting any of those numbers.
+
+Everything is redirected by env var, so nothing touches the tracked tree — and
+the last line is the control that proves it:
+
+```bash
+S=$(mktemp -d); mkdir -p "$S/posts" "$S/editions"
+python3 -c "
+import json,sys
+c=json.load(open('scripts/news/sources.json'))
+c.update(maxItems=300, minScore=-999, maxAgeDays=90, maxUndated=300)
+json.dump(c, open('$S/sources.json','w'))"
+echo '{}' > "$S/seen.json"
+NEWS_CONFIG=$S/sources.json NEWS_SEEN=$S/seen.json \
+NEWS_POSTS_DIR=$S/posts NEWS_EDITIONS_DIR=$S/editions \
+  node scripts/news/fetch-news.mjs --no-llm
+
+git status --porcelain scripts/news/seen.json src/content/blog   # CONTROL: must be empty
+```
+
+🔴 **`--no-llm` is required here, not a convenience.** With the model in the
+loop this fetches 300 items and summarises every one, which is hours. The
+excerpts are what is being measured and they are identical either way.
+
+🔴 The run writes a `sourceExcerpt` per item, which is the corpus. Count against
+`stripBoilerplate` from `scripts/news/excerpt.mjs` — importing the real module,
+never re-typing the regexes, because a re-typed predicate measures the copy.
+
+🔴 And every count of zero needs a positive control printed beside it. The
+`Today is … day .` rule was measured at **0** and is really **1**: the predicate
+used `[^.]` and the one real instance carries a version number with a dot in it.
+The zero looked exactly like a clean corpus.
+
 ## Tuning what gets picked
 
 Everything lives in `scripts/news/sources.json`:

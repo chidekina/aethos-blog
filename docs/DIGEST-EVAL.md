@@ -289,6 +289,254 @@ diff <(grep -oE 'https?://[^)]+' $D/a/posts/*[!t].mdx | sort) \
      <(grep -oE 'https?://[^)]+' $D/b/posts/*[!t].mdx | sort) && echo "same items"
 ```
 
+### 3c. The two blockers on §3b are closed — measured 2026-09-09
+
+§3b left the `--no-llm` default "blocked only on a deterministic boilerplate
+strip". That strip exists now, and building it turned up a third thing neither
+lane had seen.
+
+**The strip.** Measured on **94 real excerpts** pulled through the real pipeline,
+not on fixtures:
+
+| rule | hits | shipped |
+|---|---:|---|
+| headline repeated at the head | 10/94 | yes |
+| `The post … appeared first on …` | 5/94 | yes |
+| newsletter greeting | 3/94 | yes |
+| `Today is … day .` | **1/94** | **no — see below** |
+
+🔴 **The greeting rule shipped with the very defect `Today is … day .` was
+rejected for, and it was caught in review rather than by the suite.** Its first
+form ended `\bhere\b[^.!?]{0,24}[.!?\\]*` — 24 characters of anything, and no
+required terminator — so a greeting that runs on into a real sentence was
+stripped, and the cut landed wherever character 24 fell:
+
+```
+in : "Hi folks, the new parser is here and it is much faster than the old one. Details follow."
+out: "han the old one. Details follow."
+```
+
+Mid-word, and **before** `trimToBoundary`, whose whole contract is that a cut
+never lands mid-word — so the downstream guarantee could not repair it. The
+greeting now removed must be a COMPLETE opening unit: after `here`, only
+non-letters and then a real terminator.
+
+🔴 **The obvious fix is wrong.** Forbidding letters in the tail while leaving the
+terminator optional still strips, just cutting less — landing on
+`"and it ships today. …"`. Both halves are needed.
+
+> **Every fixture for this rule was a true positive, which is why 29/0 said
+> nothing about it.** The two arms that close it assert a `Hi … here …` sentence
+> **survives**; `M12` restores the shipped form and kills exactly those two.
+> Re-anchoring moved `M8`'s target line and the harness reported `ANCHOR MISSED`
+> rather than a green run — the only reason that mutation was not silently
+> retired.
+
+🔴 **The `3/94` above is NOT recomputed against the narrower rule.** The corpus
+is not tracked — it is pulled live, and the command is in `NEWS-PIPELINE.md`, so
+the number stands as measured against the permissive form. What could be checked
+was: on the 8 excerpts of the 2026-09-10 record, old and new strip **the same
+one**, and no item diverges. Small n, and stated as such. The control that makes
+that zero readable is that the two regexes provably diverge on the prose case in
+the same run — without it, "no divergence" and "blind comparison" print alike.
+
+18 of 94 excerpts change. The headline rule is not a prefix cut: in
+`Introducing GeneBench-Pro, a new benchmark testing…` the headline *is* the
+opening of a running sentence, and cutting it leaves the line starting at
+`, a new benchmark…`. It fires only when what follows begins a new sentence.
+
+🔴 **`Today is … day .` was first measured at 0/94, and that zero was wrong.**
+The predicate was `` `Today is[^.]{0,60}day` `` and the one real instance is
+`Today is Claude Fable (and Mythos) 5.1 day .` — the version number carries a
+dot, so the negated class stopped before `day`. A zero from a blind predicate
+reads exactly like a zero from a clean corpus. With a dot-tolerant predicate the
+rule works and also eats `Today is a good day to ship, and the release notes are
+long.` One excerpt against a false positive on ordinary prose is a bad trade, so
+it stays out — named, not omitted.
+
+**The thing neither lane could see.** The whole feed excerpt for
+`This Week In React #296` was `Hi everyone, Seb and Jan here 👋\!`. The model
+returned *"React 19.3 has been released with several new features and
+improvements, including better DevTools support and performance enhancements
+that should benefit developers using the library in their applications."*
+
+`19.3` and `DevTools` came from the **title**, which is a legitimate ground, so
+the grounding lanes passed it. `performance enhancements` came from nowhere.
+
+> **A grounding check cannot catch invention when the ground is a headline.**
+> The lane is asking "is this token in the source?", and every distinctive token
+> was. What went wrong is that a headline plus a greeting cannot support three
+> clauses of claim, and no per-token question asks that.
+
+Closed at the source rather than in the check: an item whose excerpt is empty
+once boilerplate comes off is no longer handed to the model at all — 3 of 94,
+and it is the proven-defective set. The 60-character band below it (`Stream the
+latest episode`, `Hint--it's in Explore & Expand`, 7 more) is just as groundless
+in principle and is **named, not swept in**, because nothing has measured it
+producing a bad line.
+
+### 3d. DECIDED 2026-09-09 — summarisation is opt-in, translation stays
+
+§3b's two model wins were boilerplate removal and compression. Boilerplate is
+deterministic as of §3c; compression already was (`trimToBoundary`). What stayed
+on the model's side of the ledger is three inventions in eight (§3b) plus the
+shape §3c added, which no grounding check can catch. Contribution to **published**
+prose, measured on edition 1: **zero** — not one model sentence survived the
+human pass.
+
+The operator flipped it on that evidence — and then it had to be flipped
+**half back**, within hours, for a reason none of §3, §3b or §3c had looked at.
+
+🔴 **The one-flag version shipped a monolingual PT edition.** With the model off,
+`summaryPt` is assigned `summaryEn`. Measured on a 94-item corpus: **94 of 94 PT
+lines byte-identical to their EN lines** — the Portuguese edition of a bilingual
+blog, in English, under a translated intro paragraph.
+
+```bash
+node -e "const r=require('./scripts/news/editions/<date>.json');
+  console.log(r.items.filter(i=>i.summaryPt===i.summaryEn).length+'/'+r.items.length)"
+```
+
+> **Every section above compared EN line quality, so every section above missed
+> it.** The measurements were sound and the question was too narrow: "is the
+> model's sentence better than the excerpt?" never asks "what happens to the
+> other language?". A decision is only as wide as the question that produced it.
+
+So the two model steps are now two decisions, because the evidence separates
+them. The measured case is entirely about **summarisation**. There is no such
+record against **translation**, and removing it breaks the deliverable outright.
+
+```bash
+node scripts/news/fetch-news.mjs                 # deterministic EN, translated PT — the DEFAULT
+node scripts/news/fetch-news.mjs --llm-summary   # let the model write the EN line
+node scripts/news/fetch-news.mjs --no-translate  # skip translation
+node scripts/news/fetch-news.mjs --llm           # both, the old meaning
+node scripts/news/fetch-news.mjs --no-llm        # neither, the old meaning
+```
+
+`--llm` and `--no-llm` keep their old meanings so every script, cron entry and
+test arm that passes them keeps working and keeps meaning what it says. Dropping
+`--no-llm` from `KNOWN_FLAGS` would turn those callers into exit 2 — a broken
+instrument, not a verdict — and there is a mutation asserting that.
+
+🔴 **The two halves fail differently, on purpose.** `--llm-summary` with no model
+**exits 2**: you asked for it, and silently handing back excerpts is the opposite
+of what you asked. Translation alone **degrades and says so**, because a weekly
+draft in one language beats no draft — but a *quietly* monolingual one is worse
+than nothing, since it reads as translated. Every run prints
+`TRANSLATED n/m`, including the good one, and every item carries `translated`
+into the edition record.
+
+🔴 The count line is printed on success too, and that is load-bearing. A mutation
+that printed it only on failure **survived its first run**: every translation arm
+ran against a dead Ollama, so no arm ever reached a run where nothing went wrong.
+ARM 20 stubs a model that answers. A mutation surviving is a statement about the
+suite, not about the code.
+
+🔴 **The weekly digest is now deterministic**, so a wedged or missing Ollama can
+no longer stop it. The diagnostics built for that failure (`ARM 14`, `16`, `17`)
+still exist and now run under `--llm`, because an arm that tests the model path
+has to ask for the model path. Two of them had been passing without asking —
+green for the wrong reason.
+
+🔴 **Edition 2 argues the other way, and it landed the same day.** The
+2026-09-10 edition — the first through the scheduler, and the last one produced
+with the model on — recorded **5 of 8 EN lines surviving the human review
+verbatim**. Edition 1's figure was **zero**, and that zero is half of what this
+decision rests on.
+
+```bash
+node -e "const r=require('./scripts/news/editions/2026-09-10.json');
+  console.log(r.items.filter(i=>i.publishedEn===i.summaryEn).length+'/'+r.items.length)"
+```
+
+The decision is not reversed on it: n=1 against n=1, and edition 1's zero was
+itself a single edition. It is recorded because the alternative is a document
+arguing from the half of the evidence that agrees with it — and because the
+three lines that DID need rewriting in edition 2 were an invented attribution,
+a shape error, and a paragraph written from a greeting, which is the failure
+class this section is about, not the survival rate.
+
+🔴 **The middle one was filed as an invention and is not one.** The handoff and
+an earlier draft of this line both called *"addressing competition"* invented.
+The source excerpt reads `onde o ai-memory chegou frente à concorrência` — the
+competition is in the ground. The model narrowed *positioning against* into
+*addressing*, which is the §3c shape class no grounding check can catch, and a
+different defect from writing a name that appears nowhere. Counting it as an
+invention put three items in a column that holds two.
+
+```bash
+node -e "const r=require('./scripts/news/editions/2026-09-10.json');
+  const i=r.items.find(x=>/AI-MEMORY/.test(x.title));
+  console.log('competition in ground:', /concorr|competition/i.test(i.sourceExcerpt));
+  console.log('CONTROL, must be false:', /zzz-not-in-any-excerpt/i.test(i.sourceExcerpt));"
+```
+
+🔴 The record that command reads lands with the edition-2 publication branch. On
+a tree without it the command fails with MODULE_NOT_FOUND — an absent file, not
+a refuted claim. Verified true against the record itself: `true`, with the
+control line `false` in the same run.
+
+🔴 **Reversing this is one flag, and should follow a measurement the same way
+flipping it did.** The comparison to make is on a real edition with the strip
+and the ground floor active, not against §3b's 09-04 numbers, which were taken
+against a weaker fallback. Running one edition with `--llm` against the same
+shortlist settles it; the shortlist is in the edition record, so it is replayed
+rather than waited for.
+
+🔴 **That sentence was false when it was written, and stayed false for a day.**
+`EDITIONS_DIR` was **write-only** in `fetch-news.mjs` — records went in, nothing
+ever read one back — so the capability this paragraph leaned on did not exist,
+and the comparison it recommends could not be run by anyone who followed it. A
+document can describe a capability into being believed without bringing it into
+being. `replay-edition.mjs` is the capability; this note is what it cost.
+
+```bash
+node scripts/news/replay-edition.mjs scripts/news/editions/<date>.json --samples 5
+node scripts/news/replay-edition.mjs <record> --json     # per-item, machine-readable
+bash scripts/news/replay-edition.test.sh                 # + .mutate.sh
+```
+
+🔴 Exit **2 is a BROKEN INSTRUMENT** — record unreadable, no recoverable ground,
+model unusable — never a verdict about the model. Exit 1 is a real finding. Do
+not chain it with `&&` as if 0 and 1 were the only outcomes.
+
+🔴 **A backfilled edition cannot be replayed, and the script refuses rather than
+pretending.** `2026-09-02.json` declares `sourceExcerpt: null` in all 8 items —
+the feeds moved on and the ground is gone. Replaying it would hand the model an
+empty prompt and grade the answer against nothing, which comes back looking like
+a clean run. `2026-09-10.json` is the only replayable record in the repo.
+
+🔴 **Quote a rate, never a single draw.** Measured 2026-09-10 over 40 generated
+lines, 5 samples on each of the 8 items of edition 2, with the strip and the
+ground floor active: **14 non-pass**, and 10 of those 14 are **two** items while
+four other items are 0/20. One item invents an attribution in 8 of 10 samples
+across two runs, with 696 characters of ground — the strip and the floor do not
+touch that class. The same item flips between `pass` and `fail` across samples,
+so edition 1's *zero survived* and edition 2's *5 of 8 survived* are both n=1
+draws. Neither number was ever load-bearing. Recompute before quoting:
+
+```bash
+node scripts/news/replay-edition.mjs scripts/news/editions/2026-09-10.json --samples 5
+```
+
+🔴 **What the ground floor demonstrably buys, measured in the same run:** the
+`This Week In React` item's recorded line was a wholly invented sentence that
+the entity check scored `pass` — the documented false negative, since the
+headline is legitimate ground. With the floor active it comes back
+`tautological`, 5 of 5. **A silent false pass became an honest non-verdict.**
+That is the floor's case; it is not a case that the model's line improved.
+
+```bash
+bash scripts/news/excerpt.test.sh        # the strip and the ground floor
+bash scripts/news/excerpt.mutate.sh      # each rule killed by its own mutation
+bash scripts/news/check-entities.test.sh # the entity lanes
+```
+
+🔴 Recompute the table before trusting it. Feeds change, and the corpus command
+is in `NEWS-PIPELINE.md` — a count in prose with no recompute beside it is the
+defect this whole document is about.
+
 ### 4. Everything else waits
 
 Building a faithfulness judge for prose that may be deleted is optimizing a step

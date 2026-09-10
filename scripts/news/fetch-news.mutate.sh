@@ -16,6 +16,8 @@ REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$REPO/scripts/news/fetch-news.mjs"
 SUITE="$REPO/scripts/news/fetch-news.test.sh"
 T="$(mktemp -d)"
+PRISTINE="$T/pristine.src"
+cp "$SRC" "$PRISTINE"
 cp "$SRC" "$T/pristine.mjs"
 # 🔴 The restore must survive an INTERRUPT, not only a clean finish. Measured
 # 2026-09-04: this harness was killed mid-mutation and left fetch-news.mjs
@@ -53,7 +55,7 @@ PY
   green "$out" && { echo "  SURVIVED  $name"; return 1; }
   echo "  killed    $name"
   echo "            fails: $failed"
-  grep -qF "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
+  grep -qF -- "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
 }
 
 RC=0
@@ -92,7 +94,72 @@ mutate "M4 our model counts as its own blocker" \
   "const others = holders.models.filter(() => true);" \
   "advice did not adapt" || RC=1   # ARM 16B: with only ours loaded the advice must flip back
 
+echo "M-SUM-ON — summarisation goes back to being the default"
+mutate "summarisation on by default" \
+  "const wantSummary = argv.includes('--llm') || argv.includes('--llm-summary');" \
+  "const wantSummary = !argv.includes('--no-llm');" \
+  "default still requires Ollama" || RC=1
+
+echo "M-SUM-INERT — --llm-summary is parsed and ignored"
+mutate "summary flag inert" \
+  "const wantSummary = argv.includes('--llm') || argv.includes('--llm-summary');" \
+  "const wantSummary = false;" \
+  "--llm-summary did not reach for the model" || RC=1
+
+echo "M-TRANS-OFF — translation stops being the default (the state that shipped for a few hours)"
+mutate "translation off by default" \
+  "const wantTranslate = !argv.includes('--no-llm') && !argv.includes('--no-translate');" \
+  "const wantTranslate = argv.includes('--llm');" \
+  "monolingual output went unannounced" || RC=1
+
+echo "M-TRANS-DIE — a translation outage kills the run instead of degrading"
+mutate "outage is fatal" \
+  "    useTranslate = false;" \
+  "    process.exit(2);" \
+  "a dead Ollama now kills the default run" || RC=1
+
+echo "M-COUNT — the translated count is printed only when something went wrong"
+# Without this, the count line reverts to the shape nobody learns to read.
+mutate "count only on failure" \
+  "log(\`TRANSLATED \${translated}/\${shortlist.length} PT lines. \` +" \
+  "if (translated === shortlist.length) { /* silent on success */ } else log(\`TRANSLATED \${translated}/\${shortlist.length} PT lines. \` +" \
+  "count is only printed on failure" || RC=1
+# 🔴 The expect points at ARM 20, not ARM 19. This mutation SURVIVED its first
+# run: every translation arm ran against a dead Ollama, so no arm ever reached a
+# run where nothing went wrong, and "print only on failure" was indistinguishable
+# from "print always". ARM 20 stubs a model that answers. A mutation surviving is
+# a statement about the SUITE, not about the code.
+
+echo "M-PERITEM — every item claims it was translated"
+mutate "per-item flag always true" \
+  "      translated: it.translated === true," \
+  "      translated: true," \
+  "per-item flag missing" || RC=1
+
+echo "M-KNOWN — --no-llm is dropped from the accepted flags"
+mutate "no-llm rejected" \
+  "const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm', '--llm', '--llm-summary', '--no-translate']);" \
+  "const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--llm', '--llm-summary', '--no-translate']);" \
+  "--no-llm became an unknown flag" || RC=1
+
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
-green "$after" || { echo "FATAL: source not restored — the tree is dirty, do not commit"; exit 1; }
+# 🔴 Restoration is a property of the FILE, and it is checked against the file.
+# This used to key on the suite being green, which conflates two different
+# outcomes: on 2026-09-10 a flaky arm made this print "the tree is dirty, do not
+# commit" while `cmp` said the source was byte-identical to the pristine copy.
+# A harness that reports a red suite as an unrestored tree sends you looking for
+# a mutation that is not there.
+if cmp -s "$PRISTINE" "$SRC"; then
+  echo "restored: source is byte-identical to the pristine copy"
+else
+  echo "FATAL: SOURCE NOT RESTORED — $SRC differs from the copy taken before mutating."
+  echo "       Recover it with: cp \"$PRISTINE\" \"$SRC\"  (do this before anything else)"
+  diff -u "$PRISTINE" "$SRC" | head -20
+  exit 1
+fi
+# A red suite on a restored source is a SEPARATE finding, and usually a flaky
+# arm. Reported as itself, never as a restoration failure.
+grep -qE "(^|[^0-9])0 failed" <<<"$after" \
+  || { echo "WARNING: the suite is red on the restored source — $after"; echo "         Not a restoration failure. Run the suite alone before believing it."; RC=1; }
 exit $RC

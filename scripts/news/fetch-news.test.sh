@@ -15,6 +15,21 @@ SCRIPT="$REPO/scripts/news/fetch-news.mjs"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"; [ -n "${SRV_PID:-}" ] && kill "$SRV_PID" 2>/dev/null' EXIT
 
+# 🔴 Stub servers bind to port 0 and report the port the kernel handed them,
+# through a FIFO. They used to draw `20000 + RANDOM % 20000`, and that range
+# contains long-lived local services on this machine — serena holds 24282-24288.
+# A collision fails the bind with EADDRINUSE, the readiness `curl` loop then
+# simply gives up in silence, and the arm runs against a port that answers for
+# something else or for nothing at all.
+#
+# Measured 2026-09-10: this suite is 92/0 run on its own and produced 90/2 inside
+# the mutation harness, which runs it twelve times back to back. A test that only
+# fails under repetition reads as "flake, run it again" — the exact shape this
+# repo already carries a lesson about.
+#
+# `read` on a FIFO blocks until the stub prints, so there is no polling and no
+# timeout to guess; `-t` bounds a stub that dies before it ever binds, and says
+# which one rather than hanging the suite.
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL %s\n     %s\n' "$1" "${2:-}"; }
@@ -46,7 +61,7 @@ cat > "$T/feeds/atom.xml" <<XML
 </feed>
 XML
 
-PORT=$(( 20000 + RANDOM % 20000 ))
+mkfifo "$T/fifo_feed"
 node -e '
 const http=require("http"),fs=require("fs"),p=process.argv[1];
 http.createServer((q,r)=>{
@@ -56,8 +71,9 @@ http.createServer((q,r)=>{
     r.end(fs.readFileSync(p+"/good.xml"));},1500);}
   try{r.writeHead(200,{"content-type":"application/xml"});r.end(fs.readFileSync(f));}
   catch{r.writeHead(404);r.end("nope");}
-}).listen(process.argv[2]);
-' "$T/feeds" "$PORT" &
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' "$T/feeds" > "$T/fifo_feed" &
+read -t 25 -r PORT < "$T/fifo_feed" || { echo "FATAL: feed stub never reported a port"; exit 1; }
 SRV_PID=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$PORT/good.xml" >/dev/null && break; done
 
@@ -260,20 +276,21 @@ echo "ARM 14 — a wedged runner is caught: the catalogue answering is not gener
 # every /api/generate timed out at 600s — and /api/tags answered in under a
 # second throughout, so the liveness check passed and the digest hung forever.
 # Same false-green as pg_isready proving *a* postgres listens rather than yours.
-OPORT=$(( 20000 + RANDOM % 20000 ))
+mkfifo "$T/fifo_OPORT"
 node -e '
 const http=require("http");
 http.createServer((q,r)=>{
   if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
     return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
   // /api/generate: accept the request and never answer — a wedged runner
-}).listen(process.argv[1]);
-' "$OPORT" &
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' > "$T/fifo_OPORT" &
+read -t 25 -r OPORT < "$T/fifo_OPORT" || bad "stub OPORT never reported a port" ""
 OSRV_PID=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OPORT/api/tags" >/dev/null && break; done
 
 OUT14="$(OLLAMA_URL="http://127.0.0.1:$OPORT" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen14.json" "$T/posts14")"; ST14=$?
+  run "$T/c1.json" "$T/seen14.json" "$T/posts14" --llm)"; ST14=$?
 kill "$OSRV_PID" 2>/dev/null
 [ "$ST14" = 2 ] && ok "catalogue-ok / generation-wedged -> exit 2" || bad "wedged runner -> exit 2" "got $ST14: $OUT14"
 has "$OUT14" "generation did not respond within" \
@@ -293,19 +310,20 @@ has "$OUT14" "genuinely wedged" \
 
 # negative control: a server answering BOTH endpoints must pass the probe, or a
 # check that always failed would satisfy all three assertions above.
-OPORT2=$(( 20000 + RANDOM % 20000 ))
+mkfifo "$T/fifo_OPORT2"
 node -e '
 const http=require("http");
 http.createServer((q,r)=>{
   r.writeHead(200,{"content-type":"application/json"});
   if(q.url==="/api/tags") return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));
   r.end(JSON.stringify({response:"a summary sentence"}));
-}).listen(process.argv[1]);
-' "$OPORT2" &
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' > "$T/fifo_OPORT2" &
+read -t 25 -r OPORT2 < "$T/fifo_OPORT2" || bad "stub OPORT2 never reported a port" ""
 OSRV2_PID=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OPORT2/api/tags" >/dev/null && break; done
 OUT14B="$(OLLAMA_URL="http://127.0.0.1:$OPORT2" NEWS_PROBE_TIMEOUT_MS=5000 \
-  run "$T/c1.json" "$T/seen14b.json" "$T/posts14b")"; ST14B=$?
+  run "$T/c1.json" "$T/seen14b.json" "$T/posts14b" --llm)"; ST14B=$?
 kill "$OSRV2_PID" 2>/dev/null
 [ "$ST14B" = 0 ] && ok "control: a responsive server passes the probe" || bad "control: responsive server passes" "got $ST14B — probe fails everything: ARM 14 proves nothing: $OUT14B"
 [ -d "$T/posts14b" ] && ok "control: drafts ARE written when generation works" || bad "control: drafts written" "probe blocked a healthy run"
@@ -366,20 +384,21 @@ echo "ARM 16 - a blocked load names the model HOLDING the slot, not ours"
 # Servers start INLINE, mirroring ARM 14. A helper that backgrounded the server
 # and returned its PID through $( ) hung the whole suite: command substitution
 # waits for stdout to CLOSE, and redirecting the child did not release it.
-OP16=$(( 20000 + RANDOM % 20000 ))
+mkfifo "$T/fifo_OP16"
 node -e '
-const http=require("http"); const PS=process.argv[2];
+const http=require("http"); const PS=process.argv[1];
 http.createServer((q,r)=>{
   if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
     return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
   if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});return r.end(PS);}
   // /api/generate: accept and never answer -- a load that never completes
-}).listen(process.argv[1]);
-' "$OP16" '{"models":[{"name":"nomic-embed-text:latest","size_vram":595000000},{"name":"llama3.2:3b","size_vram":2750261248}]}' &
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' '{"models":[{"name":"nomic-embed-text:latest","size_vram":595000000},{"name":"llama3.2:3b","size_vram":2750261248}]}' > "$T/fifo_OP16" &
+read -t 25 -r OP16 < "$T/fifo_OP16" || bad "stub OP16 never reported a port" ""
 P16=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP16/api/tags" >/dev/null && break; done
 OUT16="$(OLLAMA_URL="http://127.0.0.1:$OP16" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen16.json" "$T/posts16")"; ST16=$?
+  run "$T/c1.json" "$T/seen16.json" "$T/posts16" --llm)"; ST16=$?
 kill "$P16" 2>/dev/null
 [ "$ST16" = 2 ] && ok "a blocked load is still exit 2" || bad "blocked load exit $ST16" "$OUT16"
 has "$OUT16" "ollama stop nomic-embed-text:latest" \
@@ -397,20 +416,21 @@ has "$OUT16" "NEWS_PROBE_TIMEOUT_MS" \
 
 # Both ends. With only OUR model loaded the advice must flip back, otherwise
 # the new branch is just a different fixed string.
-OP16B=$(( 20000 + RANDOM % 20000 ))
+mkfifo "$T/fifo_OP16B"
 node -e '
-const http=require("http"); const PS=process.argv[2];
+const http=require("http"); const PS=process.argv[1];
 http.createServer((q,r)=>{
   if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
     return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
   if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});return r.end(PS);}
   // /api/generate: accept and never answer -- a load that never completes
-}).listen(process.argv[1]);
-' "$OP16B" '{"models":[{"name":"llama3.2:3b","size_vram":2750261248}]}' &
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' '{"models":[{"name":"llama3.2:3b","size_vram":2750261248}]}' > "$T/fifo_OP16B" &
+read -t 25 -r OP16B < "$T/fifo_OP16B" || bad "stub OP16B never reported a port" ""
 P16B=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP16B/api/tags" >/dev/null && break; done
 OUT16B="$(OLLAMA_URL="http://127.0.0.1:$OP16B" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen16b.json" "$T/posts16b")"
+  run "$T/c1.json" "$T/seen16b.json" "$T/posts16b" --llm)"
 kill "$P16B" 2>/dev/null
 has "$OUT16B" "wedged rather than blocked" \
   && ok "only-ours-loaded flips the advice back to stopping ours" || bad "advice did not adapt" "$OUT16B"
@@ -426,7 +446,7 @@ echo "ARM 17 - an EMPTY /api/ps is a LOAD IN PROGRESS, and says so with its mech
 # timed-out generation probe is a LOAD IN PROGRESS — and since observed loads
 # here range 4.6 s to ~35 s, a 30 s budget sat inside that spread. The budget is
 # now 60 s and the message says which of the two it is looking at.
-OP17=$(( 20000 + RANDOM % 20000 ))
+mkfifo "$T/fifo_OP17"
 node -e '
 const http=require("http");
 http.createServer((q,r)=>{
@@ -435,12 +455,13 @@ http.createServer((q,r)=>{
   if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});
     return r.end(JSON.stringify({models:[]}));}
   // /api/generate: accept and never answer
-}).listen(process.argv[1]);
-' "$OP17" &
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' > "$T/fifo_OP17" &
+read -t 25 -r OP17 < "$T/fifo_OP17" || bad "stub OP17 never reported a port" ""
 P17=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP17/api/tags" >/dev/null && break; done
 OUT17="$(OLLAMA_URL="http://127.0.0.1:$OP17" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen17.json" "$T/posts17")"; ST17=$?
+  run "$T/c1.json" "$T/seen17.json" "$T/posts17" --llm)"; ST17=$?
 kill "$P17" 2>/dev/null
 [ "$ST17" = 2 ] && ok "an empty ps is still exit 2" || bad "empty ps exit $ST17" "$OUT17"
 has "$OUT17" "LOAD IS IN PROGRESS" \
@@ -455,6 +476,176 @@ has "$OUT17" "ollama stop llama3.2:3b" \
 has "$OUT17" "could NOT be read" \
   && bad "empty ps and unreadable ps render the same" "$OUT17" \
   || ok "control: an empty ps reads differently from an unreadable one"
+
+echo "ARM 18 - the model step is OPT-IN, and --no-llm still means what it says"
+# Decided 2026-09-09 on the evidence in DIGEST-EVAL 3/3b/3c. The three arms below
+# are all load-bearing together: without the --llm arm, a build that ignored the
+# flag entirely would pass; without the default arm, one that always called the
+# model would; without the --no-llm arm, dropping it from KNOWN_FLAGS would turn
+# every existing caller into exit 2, which is a broken instrument, not a verdict.
+#
+# OLLAMA_URL points at a port nothing listens on, so "did it try to reach the
+# model" is answerable from the exit code alone.
+DEAD="http://127.0.0.1:9"
+
+E18="$T/ed18"
+OUT18A="$(OLLAMA_URL="$DEAD" NEWS_EDITIONS_DIR="$E18" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen18a.json" NEWS_POSTS_DIR="$T/posts18a" node "$SCRIPT" 2>&1)"; ST18A=$?
+[ "$ST18A" -ne 2 ] \
+  && ok "default run does not reach for the model (exit $ST18A, not 2)" \
+  || bad "default still requires Ollama" "$OUT18A"
+
+OUT18B="$(OLLAMA_URL="$DEAD" NEWS_EDITIONS_DIR="$T/ed18b" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen18b.json" NEWS_POSTS_DIR="$T/posts18b" node "$SCRIPT" --llm 2>&1)"; ST18B=$?
+[ "$ST18B" -eq 2 ] \
+  && ok "--llm with no model is a broken instrument, exit 2" \
+  || bad "--llm did not reach for the model" "$OUT18B"
+# And it must say WHY in the terms the caller used, not tell them to pass a flag
+# they did not pass.
+has "$OUT18B" "You asked the model to write the summaries" \
+  && ok "and the message names what the caller actually asked for" || bad "stale --no-llm advice" "$OUT18B"
+
+OUT18C="$(OLLAMA_URL="$DEAD" NEWS_EDITIONS_DIR="$T/ed18c" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen18c.json" NEWS_POSTS_DIR="$T/posts18c" node "$SCRIPT" --no-llm 2>&1)"; ST18C=$?
+[ "$ST18C" -ne 2 ] \
+  && ok "--no-llm is still accepted and still skips the model" \
+  || bad "--no-llm became an unknown flag" "$OUT18C"
+# CONTROL: an actually-unknown flag must still be rejected, or the arm above
+# only proves that nothing is validated at all.
+OUT18D="$(NEWS_CONFIG="$T/c1.json" NEWS_SEEN="$T/seen18d.json" NEWS_POSTS_DIR="$T/posts18d" \
+  node "$SCRIPT" --zzz-not-a-flag 2>&1)"; ST18D=$?
+[ "$ST18D" -eq 2 ] \
+  && ok "control: an unknown flag is still rejected" || bad "flag validation is gone entirely" "$OUT18D"
+
+echo "ARM 19 - summarisation and translation are SEPARATE decisions"
+# 🔴 They were one flag for a few hours on 2026-09-09, and that shipped a real
+# defect: with both off, 94 of 94 PT lines came out byte-identical to their EN
+# lines. The PT edition of a bilingual blog was English under a translated intro
+# paragraph. DIGEST-EVAL 3b and 3c both missed it because both compared EN line
+# quality only.
+#
+# The measured case against the model is entirely about SUMMARISATION. There is
+# no such record against TRANSLATION, and removing it breaks the deliverable.
+DEAD19="http://127.0.0.1:9"
+
+# Default: no summarisation, translation ATTEMPTED. A dead Ollama must degrade
+# loudly rather than die -- a weekly draft in one language beats no draft, but a
+# quietly monolingual one is worse than nothing because it reads as translated.
+OUT19A="$(OLLAMA_URL="$DEAD19" NEWS_EDITIONS_DIR="$T/ed19a" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen19a.json" NEWS_POSTS_DIR="$T/posts19a" node "$SCRIPT" 2>&1)"; ST19A=$?
+[ "$ST19A" -ne 2 ] \
+  && ok "translation alone degrades instead of dying (exit $ST19A)" \
+  || bad "a dead Ollama now kills the default run" "$OUT19A"
+has "$OUT19A" "TRANSLATION UNAVAILABLE" \
+  && ok "and it says so, in the log, unprompted" || bad "monolingual output went unannounced" "$OUT19A"
+has "$OUT19A" "do not publish it as-is" \
+  && ok "and names the consequence rather than only the cause" || bad "cause named, consequence not" "$OUT19A"
+# The count line is printed on EVERY run, not only the bad one: a line that
+# appears only on failure is a line nobody has learned to look for.
+has "$OUT19A" "TRANSLATED 0/" \
+  && ok "the translated count is stated even when it is zero" || bad "no count line" "$OUT19A"
+
+# --llm-summary is the half that REFUSES, because the caller asked for it.
+OUT19B="$(OLLAMA_URL="$DEAD19" NEWS_EDITIONS_DIR="$T/ed19b" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen19b.json" NEWS_POSTS_DIR="$T/posts19b" node "$SCRIPT" --llm-summary 2>&1)"; ST19B=$?
+[ "$ST19B" -eq 2 ] \
+  && ok "--llm-summary with no model is a broken instrument" || bad "--llm-summary did not reach for the model" "$OUT19B"
+
+# --no-translate must not probe at all: nothing needs the model.
+OUT19C="$(OLLAMA_URL="$DEAD19" NEWS_EDITIONS_DIR="$T/ed19c" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen19c.json" NEWS_POSTS_DIR="$T/posts19c" node "$SCRIPT" --no-translate 2>&1)"; ST19C=$?
+[ "$ST19C" -ne 2 ] && ok "--no-translate needs no model" || bad "--no-translate still probes" "$OUT19C"
+has "$OUT19C" "TRANSLATION UNAVAILABLE" \
+  && bad "--no-translate reported as an outage" "$OUT19C" \
+  || ok "control: asking for no translation is not an outage"
+
+# BOTH ENDS on the record: the edition must say which steps actually ran, or a
+# monolingual draft is indistinguishable from a translated one after the fact.
+REC19="$(command ls "$T/ed19a"/*.json 2>/dev/null | head -1)"
+if [ -n "$REC19" ]; then
+  R19="$(node -e '
+    const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const same=r.items.filter(i=>i.summaryPt===i.summaryEn).length;
+    console.log("llm="+r.llm+" translated="+r.translated+" copies="+same+"/"+r.items.length
+      +" perItem="+String(r.items[0].translated));
+  ' "$REC19" 2>&1)"
+  has "$R19" "llm=false" && ok "the record says summarisation did not run" || bad "record misreports summarisation" "$R19"
+  has "$R19" "translated=false" && ok "and that translation did not either" || bad "record claims a translation that did not happen" "$R19"
+  has "$R19" "perItem=false" && ok "and every item carries it" || bad "per-item flag missing" "$R19"
+else
+  bad "no edition record from the default run" "$OUT19A"
+fi
+
+echo "ARM 20 - the SUCCESS path of translation, with a stub that actually answers"
+# 🔴 This arm exists because a mutation survived. Every other translation arm
+# runs against a dead Ollama, so the whole translation path was tested only in
+# its failure mode -- and a suite made of failure arms certifies a translator
+# that never translates. The surviving mutation made the count line print only
+# when something went wrong, and nothing noticed, because no arm ever reached a
+# run where nothing went wrong.
+mkfifo "$T/fifo_OP20"
+node -e '
+const http=require("http");
+let bodies="";
+http.createServer((q,r)=>{
+  if(q.url==="/api/tags"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[{name:"llama3.2:3b"}]}));}
+  if(q.url==="/api/ps"){r.writeHead(200,{"content-type":"application/json"});
+    return r.end(JSON.stringify({models:[{name:"llama3.2:3b",size_vram:1}]}));}
+  if(q.url==="/api/generate"){
+    let b=""; q.on("data",c=>b+=c);
+    return q.on("end",()=>{
+      // Prefix rather than echo: the assertion below needs the PT line to be
+      // DIFFERENT from the EN line, or "it translated" and "it copied" produce
+      // the same bytes and the arm proves nothing.
+      r.writeHead(200,{"content-type":"application/json"});
+      r.end(JSON.stringify({response:"TRADUZIDO: linha em portugues."}));
+    });
+  }
+  r.writeHead(404); r.end();
+}).listen(0,"127.0.0.1",function(){require("fs").writeSync(1,String(this.address().port)+"\n")});
+' > "$T/fifo_OP20" &
+read -t 25 -r OP20 < "$T/fifo_OP20" || bad "stub OP20 never reported a port" ""
+P20=$!
+for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP20/api/tags" >/dev/null && break; done
+
+OUT20="$(OLLAMA_URL="http://127.0.0.1:$OP20" NEWS_PROBE_TIMEOUT_MS=4000 \
+  NEWS_EDITIONS_DIR="$T/ed20" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen20.json" NEWS_POSTS_DIR="$T/posts20" node "$SCRIPT" 2>&1)"; ST20=$?
+kill "$P20" 2>/dev/null
+
+[ "$ST20" -eq 0 ] && ok "a run with a working model exits 0" || bad "success path does not complete" "$OUT20"
+has "$OUT20" "TRANSLATED 2/2" \
+  && ok "the count line prints on the SUCCESSFUL run too" || bad "count is only printed on failure" "$OUT20"
+has "$OUT20" "The PT draft is a translation." \
+  && ok "and says plainly that the draft is translated" || bad "success wording missing" "$OUT20"
+has "$OUT20" "TRANSLATION UNAVAILABLE" \
+  && bad "a working model reported as an outage" "$OUT20" \
+  || ok "control: a working model is not an outage"
+
+REC20="$(command ls "$T/ed20"/*.json 2>/dev/null | head -1)"
+if [ -n "$REC20" ]; then
+  R20="$(node -e '
+    const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const differ=r.items.filter(i=>i.summaryPt!==i.summaryEn).length;
+    console.log("translated="+r.translated+" llm="+r.llm
+      +" perItem="+r.items.every(i=>i.translated===true)
+      +" differ="+differ+"/"+r.items.length
+      +" pt="+JSON.stringify(String(r.items[0].summaryPt).slice(0,12)));
+  ' "$REC20" 2>&1)"
+  has "$R20" "translated=true" && ok "the record says translation ran" || bad "record misreports translation" "$R20"
+  has "$R20" "llm=false" \
+    && ok "and that summarisation did NOT -- the two are independent" || bad "translation dragged summarisation in" "$R20"
+  has "$R20" "perItem=true" && ok "every item carries the flag" || bad "per-item flag not set on success" "$R20"
+  # The load-bearing one: the PT lines must actually DIFFER from the EN lines.
+  # `translated: true` is a record of what was attempted; this is the output.
+  has "$R20" "differ=2/2" \
+    && ok "and the PT lines really differ from the EN lines" || bad "flag says translated, bytes say copied" "$R20"
+  has "$R20" '"TRADUZIDO: l"' \
+    && ok "the PT line is what the model returned" || bad "PT line is not the model output" "$R20"
+else
+  bad "no edition record from the success run" "$OUT20"
+fi
 
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"

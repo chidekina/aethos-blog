@@ -6,6 +6,8 @@ REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$REPO/scripts/news/excerpt.mjs"
 SUITE="$REPO/scripts/news/excerpt.test.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+PRISTINE="$T/pristine.src"
+cp "$SRC" "$PRISTINE"
 base="$(bash "$SUITE" 2>&1 | tail -1)"; echo "baseline: $base"
 grep -qE "(^|[^0-9])0 failed" <<<"$base" || { echo "FATAL: not green before mutating"; exit 1; }
 
@@ -23,7 +25,7 @@ PY
   local failed; failed="$(grep '^  FAIL' <<<"$out" | sed 's/^  FAIL //' | tr '\n' ';')"
   grep -qE "(^|[^0-9])0 failed" <<<"$out" && { echo "  SURVIVED  $name"; return 1; }
   echo "  killed    $name"; echo "            fails: $failed"
-  grep -qF "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
+  grep -qF -- "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
 }
 
 RC=0
@@ -52,7 +54,79 @@ mutate "M4 touches a line under budget" \
   "  if (s.length < 0) return s;" \
   "short line altered" || RC=1
 
+echo "M5 — the headline strip becomes a naive prefix cut (the version real data refutes)"
+mutate "M5 naive prefix strip" \
+  "  if (!/^[\\p{Lu}\\p{Nd}\"'“]/u.test(next)) return s;      // running sentence: keep" \
+  "  void next;" \
+  "naive prefix strip broke a sentence" || RC=1
+
+echo "M6 — the headline strip never fires"
+mutate "M6 headline strip disabled" \
+  "  if (head.slice(0, t.length).toLowerCase() !== t.toLowerCase()) return s;" \
+  "  if (true) return s;" \
+  "repeated headline survived" || RC=1
+
+echo "M7 — the publisher footer rule loses its anchor and its 'appeared first on'"
+mutate "M7 unanchored footer rule" \
+  "    .replace(/\\s*\\bThe post\\b[\\s\\S]{0,200}?\\bappeared first on\\b[^.!?]{0,60}[.!?]?\\s*\$/iu, '')" \
+  "    .replace(/\\s*\\bThe post\\b[\\s\\S]*/iu, '')" \
+  "unanchored footer rule ate real prose" || RC=1
+
+echo "M8 — the greeting rule stops requiring 'here'"
+mutate "M8 greeting rule too broad" \
+  "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,60}\\bhere\\b[^\\p{L}.!?]{0,24}[.!?\\\\]+\\s*/iu, '')" \
+  "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,84}[.!?\\\\]*\\s*/iu, '')" \
+  "greeting rule too broad" || RC=1
+
+echo "M9 — boilerplate is stripped AFTER the budget cut instead of before"
+mutate "M9 wrong composition order" \
+  "export function stripBoilerplate(text, title) {
+  return stripRepeatedTitle(stripFeedFurniture(text), title);" \
+  "export function stripBoilerplate(text, title) {
+  void title; return String(text ?? '');" \
+  "headline still consumed the budget" || RC=1
+
+echo "M10 — the ground floor answers true to everything"
+mutate "M10 ground floor disabled" \
+  "  if (!body) return false;" \
+  "  if (!body) return true;" \
+  "a groundless excerpt would reach the model" || RC=1
+
+echo "M12 — the greeting tail loses its boundary (the form that shipped in this PR and ate prose)"
+# 🔴 Not a hypothetical mutation: this is the exact regex that was reviewed and
+# corrected. It strips a greeting that runs on into a real sentence, and cuts at
+# whatever character 24 happens to be -- 'han the old one.' -- BEFORE
+# trimToBoundary, whose contract is that a cut never lands mid-word. M8 does not
+# cover it: M8 removes the `here` requirement, and this form keeps it.
+mutate "M12 greeting tail unbounded" \
+  '\bhere\b[^\p{L}.!?]{0,24}[.!?\\]+\s*' \
+  '\bhere\b[^.!?]{0,24}[.!?\\]*\s*' \
+  "greeting rule ate a real sentence" || RC=1
+
+echo "M11 — the headline-is-not-ground branch is dropped (the first version of this predicate)"
+mutate "M11 headline counts as ground" \
+  "  return norm(body) !== norm(String(title ?? ''));" \
+  "  return true;" \
+  "headline counted as its own ground" || RC=1
+
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
-grep -qE "(^|[^0-9])0 failed" <<<"$after" || { echo "FATAL: source not restored"; exit 1; }
+# 🔴 Restoration is a property of the FILE, and it is checked against the file.
+# This used to key on the suite being green, which conflates two different
+# outcomes: on 2026-09-10 a flaky arm made this print "the tree is dirty, do not
+# commit" while `cmp` said the source was byte-identical to the pristine copy.
+# A harness that reports a red suite as an unrestored tree sends you looking for
+# a mutation that is not there.
+if cmp -s "$PRISTINE" "$SRC"; then
+  echo "restored: source is byte-identical to the pristine copy"
+else
+  echo "FATAL: SOURCE NOT RESTORED — $SRC differs from the copy taken before mutating."
+  echo "       Recover it with: cp \"$PRISTINE\" \"$SRC\"  (do this before anything else)"
+  diff -u "$PRISTINE" "$SRC" | head -20
+  exit 1
+fi
+# A red suite on a restored source is a SEPARATE finding, and usually a flaky
+# arm. Reported as itself, never as a restoration failure.
+grep -qE "(^|[^0-9])0 failed" <<<"$after" \
+  || { echo "WARNING: the suite is red on the restored source — $after"; echo "         Not a restoration failure. Run the suite alone before believing it."; RC=1; }
 exit $RC

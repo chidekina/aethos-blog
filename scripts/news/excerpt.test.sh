@@ -90,6 +90,108 @@ import {trimToBoundary} from '$MOD';
 process.exit(trimToBoundary('A'.repeat(400),220).length <= 221 ? 0 : 1);" \
   && ok "and the budget still holds" || bad "budget blown on an unbroken token" "$out"
 
+echo "ARM 6 — the repeated headline comes off, and a running sentence does NOT"
+# 🔴 All three fixtures are COPIED from the 94-excerpt corpus measured
+# 2026-09-09, not invented. The third is the one that matters: there the
+# headline is the opening of a running sentence, and a naive prefix strip leaves
+# the line starting at ", a new benchmark…". An invented fixture agrees with the
+# naive implementation, which is why this repo copies its fixtures.
+out="$(node --input-type=module -e "
+import {stripRepeatedTitle} from '$MOD';
+const EN_DASH='–';
+const a=stripRepeatedTitle('On the Navier'+EN_DASH+'Stokes Millennium Prize Problem Impressive result from OpenAI, who used an unreleased model.','On the Navier'+EN_DASH+'Stokes Millennium Prize Problem');
+console.log('stripped='+a.slice(0,10));
+const b=stripRepeatedTitle(\"Introducing ChatGPT Images 2.5 OpenAI's image generation models are widely used.\",'Introducing ChatGPT Images 2.5');
+console.log('stripped2='+b.slice(0,7));
+const c=stripRepeatedTitle('Introducing GeneBench-Pro, a new benchmark testing AI performance in genomics.','Introducing GeneBench-Pro');
+console.log('kept='+c.startsWith('Introducing GeneBench-Pro,'));
+// An excerpt that is ONLY the headline has nothing left to keep; returning an
+// empty line would be worse than repeating the headline.
+const d=stripRepeatedTitle('Introducing GeneBench-Pro','Introducing GeneBench-Pro');
+console.log('titleOnly='+(d==='Introducing GeneBench-Pro'));
+// A headline the excerpt does not repeat must pass through untouched.
+const e=stripRepeatedTitle('Something else entirely happened today.','Introducing GeneBench-Pro');
+console.log('untouched='+e.startsWith('Something else'));
+" 2>&1)"
+has "$out" "stripped=Impressive" && ok "headline followed by a new sentence is dropped" || bad "repeated headline survived" "$out"
+has "$out" "stripped2=OpenAI" && ok "and the second measured case" || bad "second case survived" "$out"
+has "$out" "kept=true" && ok "headline that OPENS a running sentence is kept" || bad "naive prefix strip broke a sentence" "$out"
+has "$out" "titleOnly=true" && ok "an excerpt that is only the headline is left alone" || bad "stripped an excerpt down to nothing" "$out"
+has "$out" "untouched=true" && ok "a non-repeated headline changes nothing" || bad "strip fired without a repetition" "$out"
+
+echo "ARM 7 — publisher footer and newsletter greeting, both anchored"
+# Measured 5/94 and 3/94 respectively. The negative arms carry the weight: an
+# unanchored version of either eats ordinary prose, and nothing in the output
+# would show that it had.
+out="$(node --input-type=module -e "
+import {stripFeedFurniture} from '$MOD';
+console.log('footer='+stripFeedFurniture('CodeQL now supports Linux ARM64 runners. The post CodeQL 2.27.0 adds support for Linux ARM64 appeared first on The GitHub Blog .'));
+console.log('greeting='+stripFeedFurniture('Hi everyone, Seb and Jan here! React 19.3 is out with a new compiler.'));
+// NEGATIVE: 'the post' in ordinary prose, with no 'appeared first on', stays.
+console.log('prose='+stripFeedFurniture('The post office closed early, so the release slipped a day.'));
+// NEGATIVE: a greeting without the trailing 'here' is not the newsletter shape.
+console.log('hi='+stripFeedFurniture('Hi there, this release fixes three bugs.'));
+// NEGATIVE: a greeting that RUNS ON into a real sentence is not furniture. Both
+// of these were stripped by the first version of the rule, and the second was
+// cut MID-WORD -- 'han the old one.' -- because the tail matched 24 characters
+// of anything with no boundary. Every fixture above is a true positive, which
+// is exactly why the suite was green while the rule ate prose.
+console.log('runon1='+stripFeedFurniture('Hi everyone, the release is here and it ships today. It also fixes a leak.'));
+console.log('runon2='+stripFeedFurniture('Hi folks, the new parser is here and it is much faster than the old one. Details follow.'));
+" 2>&1)"
+has "$out" "footer=CodeQL now supports Linux ARM64 runners." && ok "the WordPress footer is removed" || bad "footer survived or ate the body" "$out"
+has "$out" "greeting=React 19.3 is out with a new compiler." && ok "the newsletter greeting is removed" || bad "greeting survived or ate the body" "$out"
+has "$out" "prose=The post office closed early" && ok "'The post' in ordinary prose is untouched" || bad "unanchored footer rule ate real prose" "$out"
+has "$out" "hi=Hi there, this release fixes three bugs." && ok "a greeting without 'here' is not the shape" || bad "greeting rule too broad" "$out"
+has "$out" "runon1=Hi everyone, the release is here and it ships today." && ok "a greeting running into a sentence is left whole" || bad "greeting rule ate a real sentence" "$out"
+has "$out" "runon2=Hi folks, the new parser is here and it is much faster" && ok "and the run-on case is not cut mid-word" || bad "greeting rule cut mid-word, before trimToBoundary could not fix it" "$out"
+
+echo "ARM 8 — boilerplate comes off BEFORE the budget cut"
+# Order matters: 220 characters spent on a repeated headline is 220 characters
+# the reader does not get. This asserts the composition, not either half.
+out="$(node --input-type=module -e "
+import {stripBoilerplate,trimToBoundary,EXCERPT_BUDGET} from '$MOD';
+const title='Introducing ChatGPT Images 2.5';
+const body='OpenAI image models are widely used. '.repeat(12);
+const raw=title+' '+body;
+const good=trimToBoundary(stripBoilerplate(raw,title),EXCERPT_BUDGET);
+const bad_=trimToBoundary(raw,EXCERPT_BUDGET);
+console.log('leadsWithBody='+good.startsWith('OpenAI'));
+console.log('naiveLeadsWithTitle='+bad_.startsWith('Introducing'));
+console.log('within='+(good.length<=EXCERPT_BUDGET+1));
+" 2>&1)"
+has "$out" "leadsWithBody=true" && ok "the trimmed line starts at the body" || bad "headline still consumed the budget" "$out"
+# The control: without the strip the same input DOES lead with the headline, so
+# the arm above is measuring the strip and not a property of the fixture.
+has "$out" "naiveLeadsWithTitle=true" && ok "and without the strip it does not (control)" || bad "fixture proves nothing — it leads with the body either way" "$out"
+has "$out" "within=true" && ok "the budget still holds" || bad "budget blown" "$out"
+
+echo "ARM 9 — an excerpt with no ground must not be handed to a model"
+# 🔴 Recorded, not imagined. On the 2026-09-10 edition the whole feed excerpt for
+# "This Week In React #296" was `Hi everyone, Seb and Jan here 👋\!`, and the
+# model returned a confident three-clause paragraph. Two of its facts came from
+# the TITLE — a legitimate ground, so the entity check passed it — and
+# "performance enhancements" came from nowhere at all.
+out="$(node --input-type=module -e "
+import {hasSummarisableGround} from '$MOD';
+console.log('greeting='+hasSummarisableGround('Hi everyone, Seb and Jan here!','This Week In React #296: React 19.3, DevTools'));
+console.log('content='+hasSummarisableGround('OpenTelemetry ships new GenAI semantic conventions for LLM spans.','Inside the LLM Call'));
+// The headline alone is not ground. stripRepeatedTitle deliberately returns the
+// headline unchanged when nothing follows it — so that a line is never emptied —
+// and the first version of this predicate read that as ground.
+console.log('titleOnly='+hasSummarisableGround('Introducing GeneBench-Pro','Introducing GeneBench-Pro'));
+// Same headline, punctuation and case differing: still not ground.
+console.log('titleOnlyLoose='+hasSummarisableGround('introducing genebench pro!','Introducing GeneBench-Pro'));
+// BOTH ENDS: a short but real excerpt IS ground. A predicate that answered
+// false to everything would pass every arm above.
+console.log('shortReal='+hasSummarisableGround('Why and how we rewrote Bun from Zig to Rust','Rewriting Bun in Rust'));
+" 2>&1)"
+has "$out" "greeting=false" && ok "a greeting-only excerpt carries no ground" || bad "a groundless excerpt would reach the model" "$out"
+has "$out" "content=true" && ok "a real excerpt does" || bad "real content rejected" "$out"
+has "$out" "titleOnly=false" && ok "an excerpt that is only the headline is not ground" || bad "headline counted as its own ground" "$out"
+has "$out" "titleOnlyLoose=false" && ok "and case/punctuation do not smuggle it back in" || bad "headline comparison is byte-exact" "$out"
+has "$out" "shortReal=true" && ok "a short but real excerpt is ground (control)" || bad "predicate answers false to everything" "$out"
+
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
