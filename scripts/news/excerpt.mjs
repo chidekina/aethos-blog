@@ -100,6 +100,37 @@ export function stripBoilerplate(text, title) {
 }
 
 /**
+ * A model asked to summarise nothing writes something anyway.
+ *
+ * 🔴 Measured on the 2026-09-10 edition. The "This Week In React #296" item's
+ * whole feed excerpt was `Hi everyone, Seb and Jan here 👋\!` — 34 characters,
+ * no claim about anything. The model produced: "React 19.3 has been released
+ * with several new features and improvements, including better DevTools support
+ * and performance enhancements that should benefit developers using the library
+ * in their applications." `19.3` and `DevTools` came from the TITLE, which is a
+ * legitimate ground, so the entity check passed it. `performance enhancements`
+ * came from nowhere, and nothing in the pipeline could have caught it.
+ *
+ * The floor is EMPTY-after-stripping, not a character count, and the narrowness
+ * is on purpose: 3 of 94 excerpts in the measured corpus are empty once feed
+ * furniture comes off, and those three are the proven-defective set. Seven more
+ * fall under 60 characters ("Stream the latest episode", "Hint--it's in Explore
+ * & Expand") and are just as groundless in principle, but nothing here has
+ * measured them producing a bad line. That band is named, not swept in.
+ */
+export const hasSummarisableGround = (text, title) => {
+  const body = stripBoilerplate(text, title).trim();
+  if (!body) return false;
+  // 🔴 An excerpt that IS the headline is not ground either, and this branch
+  // exists because the first version missed it: `stripRepeatedTitle` returns
+  // the headline unchanged when there is nothing after it — deliberately, so a
+  // line is never emptied — and that made "the excerpt is only the headline"
+  // read as `true` here. Same text, opposite meaning in the two callers.
+  const norm = (x) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return norm(body) !== norm(String(title ?? ''));
+};
+
+/**
  * Cut an excerpt at a boundary a reader recognises, never mid-word.
  *
  * 🔴 Measured 2026-09-04: with a bare `slice(0, 220)`, ALL EIGHT lines of a

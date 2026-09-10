@@ -157,6 +157,32 @@ has "$out" "leadsWithBody=true" && ok "the trimmed line starts at the body" || b
 has "$out" "naiveLeadsWithTitle=true" && ok "and without the strip it does not (control)" || bad "fixture proves nothing — it leads with the body either way" "$out"
 has "$out" "within=true" && ok "the budget still holds" || bad "budget blown" "$out"
 
+echo "ARM 9 — an excerpt with no ground must not be handed to a model"
+# 🔴 Recorded, not imagined. On the 2026-09-10 edition the whole feed excerpt for
+# "This Week In React #296" was `Hi everyone, Seb and Jan here 👋\!`, and the
+# model returned a confident three-clause paragraph. Two of its facts came from
+# the TITLE — a legitimate ground, so the entity check passed it — and
+# "performance enhancements" came from nowhere at all.
+out="$(node --input-type=module -e "
+import {hasSummarisableGround} from '$MOD';
+console.log('greeting='+hasSummarisableGround('Hi everyone, Seb and Jan here!','This Week In React #296: React 19.3, DevTools'));
+console.log('content='+hasSummarisableGround('OpenTelemetry ships new GenAI semantic conventions for LLM spans.','Inside the LLM Call'));
+// The headline alone is not ground. stripRepeatedTitle deliberately returns the
+// headline unchanged when nothing follows it — so that a line is never emptied —
+// and the first version of this predicate read that as ground.
+console.log('titleOnly='+hasSummarisableGround('Introducing GeneBench-Pro','Introducing GeneBench-Pro'));
+// Same headline, punctuation and case differing: still not ground.
+console.log('titleOnlyLoose='+hasSummarisableGround('introducing genebench pro!','Introducing GeneBench-Pro'));
+// BOTH ENDS: a short but real excerpt IS ground. A predicate that answered
+// false to everything would pass every arm above.
+console.log('shortReal='+hasSummarisableGround('Why and how we rewrote Bun from Zig to Rust','Rewriting Bun in Rust'));
+" 2>&1)"
+has "$out" "greeting=false" && ok "a greeting-only excerpt carries no ground" || bad "a groundless excerpt would reach the model" "$out"
+has "$out" "content=true" && ok "a real excerpt does" || bad "real content rejected" "$out"
+has "$out" "titleOnly=false" && ok "an excerpt that is only the headline is not ground" || bad "headline counted as its own ground" "$out"
+has "$out" "titleOnlyLoose=false" && ok "and case/punctuation do not smuggle it back in" || bad "headline comparison is byte-exact" "$out"
+has "$out" "shortReal=true" && ok "a short but real excerpt is ground (control)" || bad "predicate answers false to everything" "$out"
+
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
