@@ -55,6 +55,29 @@ const WEAK_STOPWORDS = new Set([
   'na', 'nos', 'nas', 'para', 'por', 'com', 'que', 'se', 'ao', 'aos', 'sem', 'sobre',
 ]);
 
+/**
+ * Unicode punctuation the model rewrites without changing meaning.
+ *
+ * 🔴 Measured 2026-09-09 on the first timer-produced edition. The source title
+ * carries `Navier` U+2013 `Stokes` (en dash); the model's summary carries
+ * `Navier` U+002D `Stokes` (ASCII hyphen). Byte comparison called that an
+ * ungrounded invention. It is the opposite — normalising a typographic dash to
+ * a hyphen is correct, and the identifier survived intact.
+ *
+ * Both sides go through this, never one: normalising only the summary would
+ * leave the mirror-image false positive when the model emits the fancy dash and
+ * the source has the plain one.
+ *
+ * Deliberately narrow. It maps dashes to `-`, curly quotes to straight, and
+ * no-break space to space. It does NOT strip accents: `milhao` and `milhão`
+ * are different words and folding them would hide a real translation defect.
+ */
+const punctNormalize = (s) => String(s ?? '')
+  .replace(/[\u2010-\u2015\u2212\u00AD]/gu, '-')
+  .replace(/[\u2018\u2019\u201B\u2032]/gu, "'")
+  .replace(/[\u201C\u201D\u2033]/gu, '"')
+  .replace(/\u00A0/gu, ' ');
+
 const stripEdges = (w) =>
   w.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}%]+$/u, '').replace(/['’]s$/u, '');
 
@@ -128,8 +151,105 @@ const digitsOf = (n) => n.replace(/[.,\s]/g, '');
 
 const NUMBER_RE = /\p{Nd}[\p{Nd}.,]*\p{Nd}|\p{Nd}/gu;
 
+/**
+ * ── The sequence half of the number check ───────────────────────────────────
+ *
+ * 🔴 The token scan below compares a SET. `$10/million input` becoming
+ * `$10 million for input` is wrong by a factor of a million, and every token of
+ * the claim is present in the source, so the set comparison reports
+ * `0 findings across 73 tokens`. Measured, and documented in DIGEST-EVAL.md as
+ * a false negative on the check's own motivating class.
+ *
+ * What actually changed is the RELATION between the number and its magnitude
+ * word: `per million` collapsed to `million`. That is decidable without a model
+ * and without guessing, so this scan asks exactly that and nothing more.
+ *
+ * Deliberately narrow, and the narrowness is the design:
+ *
+ *  - It fires ONLY when the same (number, magnitude) pair occurs on both sides
+ *    with a DIFFERENT per-relation. A number the source never carries is the
+ *    existing scan's job; a magnitude the source never carries is not evidence
+ *    of a rearrangement.
+ *  - It is symmetric. Inventing `per` is as wrong as dropping it, and a one-way
+ *    version reads as fixed while half the class walks through — the exact
+ *    shape the EN→PT equivalents map already got caught by once.
+ *  - Numbers keep their separator-stripped comparison, so `1,000,000` and
+ *    `1.000.000` are the same number across locales, per the note above.
+ */
+const MAGNITUDE_WORDS = new Set([
+  'million', 'millions', 'billion', 'billions', 'trillion', 'trillions', 'thousand', 'thousands',
+  'milhao', 'milhoes', 'bilhao', 'bilhoes', 'trilhao', 'trilhoes', 'mil',
+  'token', 'tokens', 'request', 'requests', 'query', 'queries', 'user', 'users',
+  'month', 'months', 'year', 'years', 'day', 'days', 'hour', 'hours', 'second', 'seconds',
+  'word', 'words', 'call', 'calls', 'seat', 'seats',
+]);
+
+// `a`/`um` are excluded on purpose: "$10 a month" does mean per-month, but so
+// does the article in ordinary prose, and a marker that fires on an article
+// would flag correct sentences constantly.
+const PER_WORDS = new Set(['per', 'each', 'every', 'por', 'cada']);
+
+// Accents are folded HERE and nowhere else. This set is matched against, never
+// reported, so folding cannot hide a defect — it only lets `milhão` and the
+// unaccented spelling a model sometimes emits reach the same bucket.
+const fold = (w) => w.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/**
+ * Every `{ digits, magnitude, per }` triple the text asserts.
+ * `per` is true when a `/` sits between the number and the magnitude word, or
+ * when a per-word does.
+ */
+export function extractRelations(text) {
+  const src = punctNormalize(text).replace(/[`*_]/g, ' ');
+  const out = [];
+  for (const m of src.matchAll(NUMBER_RE)) {
+    const digits = digitsOf(m[0]);
+    if (!digits) continue;
+    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 40);
+    // `sep` is what sits between the number and the next word — a `/` here is
+    // the whole difference between "$10 per million" and "$10 million".
+    const mm = after.match(/^([^\p{L}\p{N}]*)(\p{L}[\p{L}\p{M}]*)(?:([^\p{L}\p{N}]*)(\p{L}[\p{L}\p{M}]*))?/u);
+    if (!mm) continue;
+    const [, sep1, w1, sep2 = '', w2 = ''] = mm;
+    const slashBefore = (s) => /\//.test(s ?? '');
+    if (MAGNITUDE_WORDS.has(fold(w1))) {
+      out.push({ digits, magnitude: fold(w1), per: slashBefore(sep1) });
+      continue;
+    }
+    if (PER_WORDS.has(fold(w1)) && w2 && MAGNITUDE_WORDS.has(fold(w2))) {
+      out.push({ digits, magnitude: fold(w2), per: true });
+      continue;
+    }
+    // `$10/M` and `$10/token` where the magnitude word is the one right after a
+    // slash but is not in the list is intentionally NOT recorded: an unlisted
+    // word is unknown, and inventing a relation from it would be the guessing
+    // this check exists to avoid.
+  }
+  return out;
+}
+
+/**
+ * Relations the summary asserts that contradict the ground on the per-marker.
+ * Returns [] when there is nothing comparable — which the caller must not read
+ * as a pass; see `relationsChecked` in the result.
+ */
+export function relationConflicts(summaryText, groundText) {
+  const mine = extractRelations(summaryText);
+  const theirs = extractRelations(groundText);
+  const bad = [];
+  for (const r of mine) {
+    const sameSubject = theirs.filter((g) => g.digits === r.digits && g.magnitude === r.magnitude);
+    if (sameSubject.length === 0) continue;              // not this check's question
+    if (sameSubject.some((g) => g.per === r.per)) continue;
+    bad.push(r.per
+      ? `${r.digits} per ${r.magnitude} (source says ${r.digits} ${r.magnitude})`
+      : `${r.digits} ${r.magnitude} (source says ${r.digits} per ${r.magnitude})`);
+  }
+  return { conflicts: bad, comparable: mine.length };
+}
+
 export function extractTokens(text) {
-  const src = String(text ?? '').replace(/[`*_]/g, ' ');
+  const src = punctNormalize(text).replace(/[`*_]/g, ' ');
   const strong = new Set();
   const weak = new Set();
 
@@ -170,7 +290,7 @@ export function checkSummary({ summary, grounds }) {
     return { status: 'broken', reason: 'no ground text to check against', missing: emptyMissing(), checked: 0 };
   }
 
-  const hay = pool.join('\n').replace(/[`*_]/g, ' ');
+  const hay = punctNormalize(pool.join('\n')).replace(/[`*_]/g, ' ');
   const hayLower = hay.toLowerCase();
   const hayNumbers = new Set([...hay.matchAll(NUMBER_RE)].map((m) => digitsOf(m[0])));
 
@@ -181,27 +301,42 @@ export function checkSummary({ summary, grounds }) {
   // 2026-09-04: a --no-llm run logged "0 ungrounded findings, 42 tokens checked"
   // and not one of those 42 could ever have been missing.
   const norm = (x) => x.toLowerCase().replace(/[\s…]+/g, ' ').trim();
-  if (norm(hay).includes(norm(text)) && norm(text).length > 0) {
+  // 🔴 BOTH sides, and the asymmetry is not hypothetical: `hay` is punctuation-
+  // normalised and markdown-stripped above, and comparing it against a RAW
+  // summary let 14 of 94 items escape the tautology guard on a --no-llm corpus
+  // — measured 2026-09-09, the same day the normaliser was added. Under
+  // --no-llm the summary IS a slice of its excerpt, so every one of those 14
+  // was a false `pass`, and 15 escapees were enough to suppress the run-level
+  // VACUOUS warning for the other 79. A guard that normalises one side is worse
+  // than one that normalises neither: it fails only on the texts that have the
+  // punctuation, which is the subset nobody has a fixture for.
+  const textCmp = punctNormalize(text).replace(/[`*_]/g, ' ');
+  if (norm(hay).includes(norm(textCmp)) && norm(textCmp).length > 0) {
     return { status: 'tautological', reason: 'the summary is a substring of its own source', checked: 0, missing: emptyMissing() };
   }
 
   const tok = extractTokens(text);
+  const rel = relationConflicts(text, hay);
   const missing = {
     strong: tok.strong.filter((tokenText) => !groundedIn(tokenText, hayLower)),
     weak: tok.weak.filter((tokenText) => !groundedIn(tokenText, hayLower)),
     numbers: tok.numbers.filter((n) => !hayNumbers.has(n)),
+    // Rearranged, not missing. A set comparison cannot see these by construction.
+    relations: rel.conflicts,
   };
 
   const checked = tok.strong.length + tok.numbers.length;
   // Zero findings out of zero checkable tokens is not a pass — it is a blind run.
-  const status = checked === 0
-    ? 'no-tokens'
-    : (missing.strong.length + missing.numbers.length > 0 ? 'fail' : 'pass');
+  // A summary with no strong token and no number but a contradicted relation is
+  // still a FAIL: `no-tokens` describes nothing to check, and here there was.
+  const status = (missing.strong.length + missing.numbers.length + missing.relations.length > 0)
+    ? 'fail'
+    : (checked === 0 ? 'no-tokens' : 'pass');
 
-  return { status, checked, tokens: tok, missing };
+  return { status, checked, relationsChecked: rel.comparable, tokens: tok, missing };
 }
 
-const emptyMissing = () => ({ strong: [], weak: [], numbers: [] });
+const emptyMissing = () => ({ strong: [], weak: [], numbers: [], relations: [] });
 
 /**
  * Translation preservation, EN → PT. Every STRONG token and every number the EN
@@ -229,21 +364,25 @@ export function checkTranslation({ summaryEn, summaryPt }) {
   if (en === pt) return { status: 'not-translated', checked: 0, missing: emptyMissing() };
 
   const tok = extractTokens(en);
-  const ptLower = pt.toLowerCase();
-  const ptNumbers = new Set([...pt.matchAll(NUMBER_RE)].map((m) => digitsOf(m[0])));
+  const ptNorm = punctNormalize(pt);
+  const ptLower = ptNorm.toLowerCase();
+  const ptNumbers = new Set([...ptNorm.matchAll(NUMBER_RE)].map((m) => digitsOf(m[0])));
 
   // A token counts as preserved if the PT line carries it verbatim OR carries a
   // measured pt-BR equivalent of it.
+  // EN -> PT, so the EN line is the ground and the PT line is the claim.
+  const rel = relationConflicts(pt, en);
   const missing = {
     strong: tok.strong.filter((tokenText) => !groundedIn(tokenText, ptLower)),
     weak: [],
     numbers: tok.numbers.filter((n) => !ptNumbers.has(n)),
+    relations: rel.conflicts,
   };
   const checked = tok.strong.length + tok.numbers.length;
-  const status = checked === 0
-    ? 'no-tokens'
-    : (missing.strong.length + missing.numbers.length > 0 ? 'fail' : 'pass');
-  return { status, checked, missing };
+  const status = (missing.strong.length + missing.numbers.length + missing.relations.length > 0)
+    ? 'fail'
+    : (checked === 0 ? 'no-tokens' : 'pass');
+  return { status, checked, relationsChecked: rel.comparable, missing };
 }
 
 /**
@@ -333,8 +472,15 @@ if (isMain) {
         if (r[lang].status === 'no-ground') continue;   // summarised above
         const c = r[lang];
         const m = [...c.missing.strong, ...c.missing.numbers];
+        const rels = c.missing.relations ?? [];
         const verb = lang === 'translation' ? 'dropped in PT' : 'ungrounded';
-        if (c.status === 'fail') console.log(`FAIL ${lang.toUpperCase()}  ${r.title}\n     ${verb}: ${m.join(', ')}`);
+        if (c.status === 'fail') {
+          if (m.length) console.log(`FAIL ${lang.toUpperCase()}  ${r.title}\n     ${verb}: ${m.join(', ')}`);
+          // Named apart from the missing-token list on purpose: nothing is
+          // absent here, so "ungrounded" would send the reviewer looking for a
+          // word that is present. The defect is the relation, not the token.
+          if (rels.length) console.log(`FAIL ${lang.toUpperCase()}  ${r.title}\n     REARRANGED (present but says something else): ${rels.join('; ')}`);
+        }
         else if (c.status === 'broken') console.log(`BROKEN ${lang.toUpperCase()}  ${r.title} — ${c.reason}`);
         else if (c.status === 'no-tokens') console.log(`NO-TOKENS ${lang.toUpperCase()}  ${r.title} — nothing checkable, this is not a pass`);
         else if (c.status === 'tautological') console.log(`TAUTOLOGICAL ${lang.toUpperCase()}  ${r.title} — ${c.reason}; this lane had no power to fail`);

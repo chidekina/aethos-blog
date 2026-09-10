@@ -30,7 +30,7 @@ has() { grep -qF -- "$2" <<<"$1"; }
 [ -f "$MOD" ] || { echo "FATAL: $MOD does not exist"; exit 1; }
 node --check "$MOD" || { echo "FATAL: $MOD does not parse"; exit 1; }
 
-run() { node --input-type=module -e "import {classify,extractTokens,checkSummary,checkTranslation,checkItem} from '$MOD'; $1" 2>&1; }
+run() { node --input-type=module -e "import {classify,extractTokens,checkSummary,checkTranslation,checkItem,extractRelations,relationConflicts} from '$MOD'; $1" 2>&1; }
 
 echo "ARM 1 — classification: the strong classes, and the words that must NOT be strong"
 out="$(run "
@@ -255,6 +255,113 @@ has "$out" "enToPt=pass" && ok "and the original EN→PT direction still holds" 
 # grounding lane, or the map has become a blanket excuse there too.
 has "$out" "lost=fail" && has "$out" "missing=CUDA" \
   && ok "a token with no equivalent is still ungrounded" || bad "map swallowed a grounding failure" "$out"
+
+echo "ARM 13 — a typographic dash normalised to a hyphen is NOT an invention"
+# 🔴 Recorded from production, not imagined. The first timer-produced edition
+# (2026-09-10) had a source titled `Navier<U+2013>Stokes` and a model summary
+# saying `Navier-Stokes`. Byte comparison called the identifier ungrounded.
+# The codepoints are written as escapes on purpose: pasting the literal glyphs
+# into this file makes the fixture depend on the editor that saved it.
+out="$(run "
+const EN_DASH='–';
+const src='On the Navier'+EN_DASH+'Stokes Millennium Prize Problem, an unreleased model produced a resolution.';
+const hyphen=checkSummary({summary:'An unreleased model resolved Navier-Stokes.',grounds:[src]});
+console.log('normalised='+hyphen.status+' missing='+hyphen.missing.strong.join('|'));
+// The MIRROR: fancy dash in the summary, plain one in the source. A one-sided
+// normaliser fixes this half and leaves the other, which is the shape that
+// already fooled this module once (the EN/PT equivalents map, ARM 12).
+const mirror=checkSummary({summary:'It resolved Navier'+EN_DASH+'Stokes today.',grounds:['Work on Navier-Stokes existence and smoothness.']});
+console.log('mirror='+mirror.status);
+// BOTH ENDS: normalising punctuation must not start excusing a real invention.
+const real=checkSummary({summary:'It resolved Navier-Stokes and Yang-Mills.',grounds:['Work on Navier'+EN_DASH+'Stokes only.']});
+console.log('real='+real.status+' still='+real.missing.strong.join('|'));
+")"
+has "$out" "normalised=pass" && ok "en dash in source, hyphen in summary: grounded" || bad "dash normalisation missing" "$out"
+has "$out" "mirror=pass" && ok "and the mirror direction too" || bad "normaliser is one-sided" "$out"
+has "$out" "real=fail" && has "$out" "still=Yang-Mills" \
+  && ok "a genuinely invented identifier is still caught" || bad "normalisation swallowed a real invention" "$out"
+
+echo "ARM 14 — the SEQUENCE half: a per-unit relation that collapsed"
+# 🔴 The measured false negative this arm exists for: '\$10/million input'
+# rendered as '\$10 million for input' is wrong by a factor of a million, and
+# the token SET is identical, so the set comparison reported 0 findings.
+#
+# Both ends, and the negative arms are the load-bearing ones: a relation check
+# that fired whenever a number sat next to a magnitude word would pass the two
+# defect arms while flagging correct prose constantly.
+out="$(run "
+const PER='Pricing starts at \$10/million input tokens and \$30/million output tokens.';
+const PLAIN='The company raised \$10 million in seed funding this year.';
+const s=(sum,src)=>checkSummary({summary:sum,grounds:[src]});
+console.log('collapsed='+s('The model costs \$10 million for input tokens.',PER).status);
+console.log('invented='+s('They charge \$10 per million.',PLAIN).status);
+console.log('keptPer='+s('The model costs \$10 per million input tokens.',PER).status);
+console.log('keptSlash='+s('It bills \$30/million output tokens.',PER).status);
+console.log('plainStaysPlain='+s('A \$10 million round closed.',PLAIN).status);
+// Division of labour: a number the source never carries belongs to the token
+// scan, and the relation lane must stay silent about it rather than double-report.
+const absent=s('It costs \$7 per million tokens.',PLAIN);
+console.log('absent='+absent.status+' nums='+absent.missing.numbers.join('|')+' rels='+absent.missing.relations.length);
+")"
+has "$out" "collapsed=fail" && ok "per-unit collapsed to plain: caught" || bad "the motivating false negative is still open" "$out"
+has "$out" "invented=fail" && ok "and the symmetric case, per invented" || bad "relation check is one-way" "$out"
+has "$out" "keptPer=pass"   && ok "faithful 'per million' stays quiet" || bad "false positive on correct prose" "$out"
+has "$out" "keptSlash=pass" && ok "faithful '/million' stays quiet"    || bad "false positive on the slash form" "$out"
+has "$out" "plainStaysPlain=pass" && ok "plain magnitude, plain summary: quiet" || bad "false positive on a plain magnitude" "$out"
+has "$out" "absent=fail" && has "$out" "nums=7" && has "$out" "rels=0" \
+  && ok "an absent number stays the token scan's finding, not the relation lane's" || bad "lanes double-report or the wrong one fired" "$out"
+
+echo "ARM 15 — the relation extractor is not blind, and does not invent relations"
+# A zero from ARM 14's negative arms is only worth something if the extractor
+# can see anything at all. Measured 2026-09-09 on the two real editions: 2
+# relations across 16 source excerpts and ZERO across the summaries, so the
+# check has had no production exposure yet. That is a limit, not a clean bill.
+out="$(run "
+console.log('alive='+extractRelations('It costs \$10 per million tokens.').length);
+console.log('slash='+JSON.stringify(extractRelations('\$30/million output')));
+// An unlisted word after a number must NOT become a relation: inventing one
+// from an unknown word is the guessing this check exists to avoid.
+console.log('unknown='+extractRelations('The 5 zorkmids arrived.').length);
+// A bare number with no magnitude word is not a relation either.
+console.log('bare='+extractRelations('Version 5 shipped.').length);
+")"
+has "$out" "alive=1" && ok "extractor sees a per-relation (positive control)" || bad "EXTRACTOR BLIND — every negative arm above is vacuous" "$out"
+has "$out" '"magnitude":"million","per":true' && ok "the slash form is read as per" || bad "slash not read as a per-marker" "$out"
+has "$out" "unknown=0" && ok "an unlisted word after a number is not a relation" || bad "extractor invents relations" "$out"
+has "$out" "bare=0" && ok "a bare number is not a relation" || bad "extractor invents relations from bare numbers" "$out"
+
+echo "ARM 16 — the tautology guard normalises BOTH sides, or it leaks on fancy punctuation"
+# 🔴 This arm exists because the suite was 50/0 while the guard leaked. Adding
+# punctuation normalisation to the haystack and not to the summary let 14 of 94
+# items on a --no-llm corpus escape to `pass` — summaries that ARE their own
+# source, reported as measured. The existing tautology arm (ARM 11) stayed green
+# throughout: its fixture is plain ASCII, so it could not see the class.
+#
+# The lesson generalised: a normaliser applied to one side of a comparison fails
+# only on the inputs that carry what it normalises, which is exactly the subset
+# no plain fixture contains.
+out="$(run "
+const EN_DASH='–', RSQUO='’';
+const src='OpenAI'+RSQUO+'s work on Navier'+EN_DASH+'Stokes existence and smoothness is described in the PDF.';
+// The summary IS a slice of the source, carrying the source's own punctuation.
+const slice=checkSummary({summary:'OpenAI'+RSQUO+'s work on Navier'+EN_DASH+'Stokes existence and smoothness',grounds:[src]});
+console.log('slice='+slice.status+' checked='+slice.checked);
+// And the mirror: the summary carries the plain forms, the source the fancy ones.
+const plain=checkSummary({summary:\"OpenAI's work on Navier-Stokes existence and smoothness\",grounds:[src]});
+console.log('plain='+plain.status);
+// Markdown emphasis is stripped from the haystack too, so it must be stripped
+// from the summary as well — the same asymmetry, a different character class.
+const md=checkSummary({summary:'the *bold* claim about CUDA kernels',grounds:['We discuss the *bold* claim about CUDA kernels at length.']});
+console.log('md='+md.status);
+// BOTH ENDS: a genuinely reworded summary must still be measured, not excused.
+const real=checkSummary({summary:'A CUDA kernel now handles Navier'+EN_DASH+'Stokes.',grounds:[src]});
+console.log('real='+real.status+' missing='+real.missing.strong.join('|'));
+")"
+has "$out" "slice=tautological" && ok "a slice carrying the source's own punctuation is a tautology" || bad "one-sided normalisation: a self-grounded summary scored" "$out"
+has "$out" "plain=tautological" && ok "and the mirror, plain summary against fancy source" || bad "normalisation leaks in the other direction" "$out"
+has "$out" "md=tautological" && ok "markdown emphasis is stripped from both sides" || bad "markdown asymmetry leaks" "$out"
+has "$out" "real=fail" && has "$out" "missing=CUDA" \
+  && ok "a reworded summary is still measured" || bad "symmetric normalisation swallowed a real check" "$out"
 
 echo
 echo "$PASS passed, $FAIL failed"
