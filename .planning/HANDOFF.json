@@ -1,47 +1,47 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-04T23:10:00.000Z",
+  "timestamp": "2026-09-10T19:32:21.878Z",
   "context": "default",
   "phase": null,
   "phase_name": "no GSD phase — this repo has no .planning/config.json; state lives in .continue-here.md",
   "status": "paused",
   "work_in_flight": false,
-  "head": "786b7c4b24b0b2560ba7e8d197a599fdd7bac531",
-  "head_matches_remote": true,
-  "working_tree_clean": true,
+  "head": "35ccd9f53d14cbdfda6137d9d0a02d7796ddf1a4",
   "head_note": "The SHA at the moment this file was WRITTEN, one commit behind the commit that carries it — a handoff cannot record its own commit. Verify with `git -C <repo> rev-parse HEAD`, never by trusting this field.",
+  "branch": "main",
+  "working_tree_clean": true,
+  "open_prs": 0,
   "completed_this_session": [
-    "Fired the weekly cron entry for real for the first time. It had only ever been verified with `env -i PATH=/usr/bin:/bin`, which reproduces one variable of cron's environment and not the firing. It returned RESULT=BROKEN.",
-    "PR #27 (merged): loadedModels() returned [] for three distinct states — nothing loaded, /api/ps non-200, /api/ps unreachable — so an unreadable reader and an empty subject were the same value. It now returns `queried` separately from the list.",
-    "PR #28 (merged): reproduced the scenario instead of reasoning about it, and RETRACTED two claims this repo had documented. Established the one that stands.",
-    "fetch-news.mutate.sh: fetch-news.mjs was the only script in scripts/news/ with a suite and no mutation harness, and the largest surface there. Four mutations, each killing a named arm, MUTATE_EXIT=0, now running in CI. Suite 66 -> 68.",
-    "docs/NEWS-PIPELINE.md gained the cron rehearsal procedure, with the crontab 99-character path truncation measured (99 works, 100 fails) and the -n/-T flag trap.",
-    "docs/DIGEST-EVAL.md §3b: the twin editions were generated over the SAME eight items, answering ADR-001's follow-up with data rather than argument."
+    "Replayed edition 2 against the current pipeline and answered ADR-001's open follow-up with a rate instead of an n=1 draw: 40 generated lines, 14 non-pass, 10 of those in TWO items while four items sat at 0/20. One item invents an attribution in 8 of 10 samples across two runs with 696 characters of ground, so the strip and the ground floor do not touch that class.",
+    "Built the replay capability itself. DIGEST-EVAL §3d had claimed the shortlist 'can be replayed rather than waited for' — EDITIONS_DIR was write-only in fetch-news.mjs, so the capability the paragraph leaned on did not exist.",
+    "Extracted the model calls into scripts/news/summarise.mjs so the prompt has one owner and three callers; fetch-news.mjs runs its pipeline at import, so a replay could not import summarizeEn without fetching 37 feeds.",
+    "Code-reviewed #29, #30, #31, #32, #33. Found and fixed a greeting strip in #30 that ate ordinary prose and cut mid-word, before trimToBoundary could repair it.",
+    "Corrected a misfiled invention count: 'addressing competition' is grounded in the source ('frente à concorrencia'), so the invention column held three where it holds two.",
+    "Merged all six PRs and verified the deploy by effect — the 2026-09-10 post went 404 to 200 while the control stayed 404, and the human-corrected AI-MEMORY line is what is live."
   ],
-  "measured_retractions": {
-    "the two models do not fit on a 4 GB card": "FALSE — they coexist at 3345 MB of 4096, both listed in /api/ps, nvidia-smi agreeing at 3323 MiB",
-    "ollama waits for a slot rather than evicting": "FALSE as a rule — one run coexisted (~35 s), another evicted (4.6 s); the behaviour is not stable between runs",
-    "a cold load is always ~7 s so the probe budget is never the problem": "FALSE — observed loads span 4.6 s to ~35 s, and the budget was 30 s, inside that spread"
+  "measured": {
+    "model_line_quality": "40 lines, 5 samples of 8 items, strip + ground floor active: 14 non-pass. Concentration matters more than the rate — 10 of 14 are two items.",
+    "ground_floor_value": "Converts the This Week In React item from a silent false `pass` on a wholly invented sentence into `tautological`, 5 of 5. A false negative became an honest non-verdict.",
+    "relation_lane_exposure": "Was 'zero measured production exposure'. Now 2 relations in grounds, 3 comparable across 40 summaries, 0 conflicts. No longer never-exercised; still too thin to validate.",
+    "instability": "The same item flips between pass and fail across samples, so edition 1's 'zero survived' and edition 2's '5 of 8 survived' are both single draws. Neither number was ever load-bearing."
   },
-  "measured_established": "A model being LOADED is not listed by /api/ps until it finishes — empty for 8.5 s of an 8.7 s cold load while the GPU already read 2743 MiB. So 'generation timed out AND /api/ps empty' is a load in progress, not an idle server and not a wedged runner. This closes the 20:47 attribution the previous handoff left open.",
   "remaining_tasks": [
-    "Monday 2026-09-07 08:00: the first cron-produced digest. Gated on the clock. Read the RESULT= line, never the exit code — and a log with NO RESULT= line is a third state (ran, never finished).",
-    "Decide whether to flip --no-llm to the default. Evidence is complete in docs/DIGEST-EVAL.md §3b: three inventions or subject errors in eight items against two wins for the model, both wins deterministic problems. Blocked only on a boilerplate strip. Operator decision — changing a published pipeline's default is not mine to make.",
-    "Build a sequence-aware numeric check. The entity check has a measured false negative on its own motivating class: '$10/million input' became '$10 million for input', and it reported 0 findings across 73 tokens, because every token of the claim is in the source. It compares a token SET; the defect is in the SEQUENCE."
+    "Monday 2026-09-14 08:00 — the first digest from the DETERMINISTIC pipeline (summarisation is now opt-in). Read `RESULT=` in scripts/news/digest.log, never the exit code; a log with no `RESULT=` line at all is a third state. Then read `TRANSLATED n/m` — n short of m means that many PT lines are COPIES.",
+    "File the two review follow-ups that have no issues: #29's numeric false positive ($1 million against a source writing $1,000,000, measured at 3 of 9 findings) and #31's edition record gaining `translated` while schemaVersion stays 1 (absent and false become indistinguishable).",
+    "The reviews for #29/#31/#32/#33 exist only in the session transcript, not on the PRs, which are now closed. If they matter, they belong in docs.",
+    "G1/G2: the sub-60-character groundless band (7 excerpts) and §3c's strip frequencies cannot be recomputed from the repo — the 94-item corpus is pulled live, not tracked. Closing either needs a live fetch."
   ],
   "blockers": [],
   "human_actions_pending": [
-    "Merging. `gh pr merge` is refused by this harness's auto-mode classifier and is allowed only after the operator asks for that specific merge by name — measured twice today. There is no workaround worth finding.",
-    "The --no-llm default decision above."
+    {"action": "Review #34 retroactively", "context": "It merged unreviewed by anyone but its author — the module extraction and the replay harness. Flagged before merging and still true.", "blocking": false}
   ],
   "decisions": [
-    "NEWS_PROBE_TIMEOUT_MS 30 s -> 60 s, because observed loads reach ~35 s. Cost named: a genuinely dead server takes a minute to say so, once a week, in a job nobody watches live.",
-    "OLLAMA_MAX_LOADED_MODELS=1 CLOSED as unjustified, not deferred — it fixes a behaviour that does not exist as described, needed root, and would have changed behaviour for every ollama client on this machine.",
-    "Retractions keep visible what they retract. The original GPU section sits above its correction; the refuted claim had reached four places and all four were corrected in the same change.",
-    "The suite caps NEWS_LLM_TIMEOUT_MS as a fail-fast guarantee: no arm needs the real model, and without it a mutation that let a wedged server through ran the harness past 600 s.",
-    "The entity check stays advisory. §3b makes that case stronger, not weaker — a check with a known false negative must not be the thing that clears an edition."
+    {"decision": "The model's summarisation still does not earn its place", "rationale": "40 lines, 14 non-pass, human lane 8/8. The strip and ground floor do not touch the invention class. Nothing here argues for flipping --llm-summary on by default."},
+    {"decision": "Extract the prompt into its own module rather than copy it into the replay", "rationale": "Two copies of a prompt diverge in silence, and the replay would then measure a prompt nobody ships. Same reason excerpt.mjs was split out."},
+    {"decision": "Build the replay on the stack tip rather than on main", "rationale": "#31 rewrites fetch-news.mjs heavily; a replay flag on main would conflict with it, and the tip is the pipeline the replay should exercise."},
+    {"decision": "Rebase each stacked branch onto main rather than merge", "rationale": "main takes commits by rebase, so the same content arrived under different SHAs and every stacked branch came up DIRTY. Rebasing drops the duplicates by patch-id and leaves exactly each PR's own commits."}
   ],
   "uncommitted_files": [],
-  "next_action": "Confirm state rather than trusting this file — the commands are in .planning/.continue-here.md under <next_action>. If Monday has not passed, remaining task 2 is the useful work and needs no digest run.",
-  "context_notes": "One through-line, and it is the same one the previous handoff recorded from the other side: a fix that addresses one direction reads as finished, and an instrument that cannot fail reads as a pass. This session the instrument was my own reasoning. I explained the cron failure three times without reproducing it — 'wedged runner', then 'GPU standoff', then 'identifies no cause' — and each was written into code, tests and docs before the next one refuted it. What finally settled it was loading a model while polling /api/ps every 0.4 s: the list is empty for the whole load. Two claims this repo had carried as measured fact fell in the same experiment, including one I had documented FURTHER earlier in the same session. Secondary instances, all caught by controls rather than by care: a suite read 59 assertions instead of 66 because I had switched to main; a grep for 'LOAD IN PROGRESS' returned 0 because the string is 'LOAD IS IN PROGRESS'; a production smoke returned 000 for three URLs including the control because I invented the hostname; a three-arm crontab measurement returned three identical failures because the -T flag does not exist here. In every one, the zero looked like a finding and was a blind instrument. The rule that earned its keep: print the positive control beside the zero, in the same run."
+  "next_action": "Nothing is in flight. If resuming before Monday, the useful work is the two follow-up issues; the digest itself is gated on the clock and needs no run.",
+  "context_notes": "The through-line this session was that almost every wrong turn came from an instrument answering confidently about the wrong state, and every one was caught by a control rather than by care. A grep pattern returned 0 for text that was present. A zsh parameter modifier made `git show` return something other than the file, and I nearly reported that the stack had lost a fix. A gate waiter reported a stale green three times running. A CONTRACT rule written outside its yaml fence was ignored in silence, exit 0, and I nearly read that as the validator having no teeth. `node --check` passed a file whose import did not resolve. In every case the thing that separated 'no finding' from 'blind instrument' was printing a positive control beside the zero, in the same run."
 }
