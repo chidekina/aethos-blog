@@ -86,6 +86,12 @@ jobs:
       - name: Fallback excerpt trim suite
         run: bash scripts/news/excerpt.test.sh
 
+      # The replay harness. Its arms use a local model stub and a dead port, so
+      # it needs no Ollama — the distinction it protects is exit 2 (broken
+      # instrument) against exit 1 (finding), which read identically in a chain.
+      - name: Edition replay suite
+        run: bash scripts/news/replay-edition.test.sh
+
       # A suite is a claim that the code is tested; a mutation run is the
       # evidence. Both harnesses restore the source and fail if it comes back
       # dirty, so a red step here means a mutation SURVIVED — an assertion that
@@ -100,6 +106,7 @@ jobs:
           # no mutation harness, so its assertions had never been shown to have
           # teeth. It runs the whole suite five times, so it is the slow step.
           bash scripts/news/fetch-news.mutate.sh
+          bash scripts/news/replay-edition.mutate.sh
 
       - name: Recommendations suite
         run: bash scripts/recommendations/from-issue.test.sh
