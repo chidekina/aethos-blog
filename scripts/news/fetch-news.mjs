@@ -21,6 +21,8 @@
 import { XMLParser } from 'fast-xml-parser';
 import { checkItem } from './check-entities.mjs';
 import { trimToBoundary, stripBoilerplate, hasSummarisableGround, EXCERPT_BUDGET } from './excerpt.mjs';
+import { OLLAMA_URL, OLLAMA_MODEL, LLM_TIMEOUT_MS, ask, oneParagraph,
+         PROMPT_EXCERPT, summarizeEn, translatePt } from './summarise.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,10 +39,7 @@ const POSTS_DIR = process.env.NEWS_POSTS_DIR ?? join(ROOT, 'src/content/blog');
 // archaeology; nothing captured it on purpose, so no eval set could accumulate.
 const EDITIONS_DIR = process.env.NEWS_EDITIONS_DIR ?? join(ROOT, 'scripts/news/editions');
 
-const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2:3b';
 const FETCH_TIMEOUT_MS = Number(process.env.NEWS_FETCH_TIMEOUT_MS ?? 20000);
-const LLM_TIMEOUT_MS = Number(process.env.NEWS_LLM_TIMEOUT_MS ?? 120000);
 // Budget for the liveness probe only. A single token on a WARM runner is ~1 s;
 // the budget exists for the COLD case, where the model must be loaded first.
 //
@@ -361,50 +360,11 @@ async function loadedModels() {
   }
 }
 
-async function ask(prompt) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), LLM_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      signal: ctl.signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, options: { temperature: 0.3 } }),
-    });
-    if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
-    const body = await res.json();
-    return String(body.response ?? '').trim();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-const oneParagraph = (s) => s.replace(/^["'`\s]+|["'`\s]+$/g, '').split('\n').filter(Boolean)[0] ?? '';
 
 
-// The model is shown a 700-char slice, so THAT is the ground the entity check
-// has to measure against — not the full excerpt, which would credit the model
-// with material it never saw.
-const PROMPT_EXCERPT = 700;
 
-async function summarizeEn(item) {
-  const out = await ask(
-    `You are writing one entry of a developer news digest. In ONE sentence of at most 35 words, ` +
-    `say plainly what happened and why a working software engineer should care. No preamble, no ` +
-    `"this article", no marketing adjectives. Output the sentence only.\n\n` +
-    `Headline: ${item.title}\nSource: ${item.source}\nExcerpt: ${item.summary.slice(0, PROMPT_EXCERPT)}`
-  );
-  return oneParagraph(out);
-}
 
-async function translatePt(sentence) {
-  const out = await ask(
-    `Translate to Brazilian Portuguese. Keep technical terms in English (LLM, agent, prompt, ` +
-    `commit, build, deploy, framework names). Output the translation only, one sentence, ` +
-    `no quotes and no commentary.\n\n${sentence}`
-  );
-  return oneParagraph(out);
-}
+
 
 // ── MDX ───────────────────────────────────────────────────────────────────
 const esc = (s) => String(s).replace(/"/g, '\\"');
