@@ -54,6 +54,40 @@ count it swept, a real `build` names pages built. This matters here because
 from outside the repo needs an explicit target — and the wrong flag order turns
 that into a gate that guards nothing.
 
+## `enforce_admins` is OFF on `main`, deliberately (decided 2026-09-09)
+
+```bash
+gh api repos/chidekina/aethos-blog/branches/main/protection \
+  --jq '{checks:.required_status_checks.contexts, strict:.required_status_checks.strict, admins:.enforce_admins.enabled}'
+```
+
+Today that reads `checks:["gate"] strict:true admins:false`, and the last field
+is a choice, not drift. CI runs on `pull_request` **and** `push: main`, so with
+`enforce_admins` on, a direct push to `main` is rejected — the required check
+has not run for that commit yet. That would end the **docs-only carve-out**
+(prose may go straight to `main`; see the global rules), which this repo uses
+for measurement write-ups several times a week.
+
+🔴 **The cost is real and is not hypothetical.** Code on `main` is held only by
+the LOCAL `~/.git-hooks/pre-commit`, which `--no-verify` skips and which GitHub
+does not enforce. **The rule is what protects `main` here, not the server.**
+Every code change goes through a PR; nothing about that is optional because the
+server stopped checking.
+
+Restore it the moment that trade stops being worth it — and verify by EFFECT,
+never by the exit code of the `gh` call:
+
+```bash
+gh api -X PUT repos/chidekina/aethos-blog/branches/main/protection/enforce_admins
+gh api repos/chidekina/aethos-blog/branches/main/protection --jq .enforce_admins.enabled  # must be true
+```
+
+🔴 A push that lands under the carve-out prints `Bypassed rule violations for
+refs/heads/main: Required status check "gate" is expected.` on the remote. That
+line is the setting working as configured, not a warning that something broke —
+but if you see it on a push carrying **code**, that is the defect this section
+is about, and it means the rule was skipped.
+
 ## Search
 
 `src/pages/search-index.json.ts` emits `dist/search-index.json` at build time;
