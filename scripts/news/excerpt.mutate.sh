@@ -6,6 +6,8 @@ REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$REPO/scripts/news/excerpt.mjs"
 SUITE="$REPO/scripts/news/excerpt.test.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+PRISTINE="$T/pristine.src"
+cp "$SRC" "$PRISTINE"
 base="$(bash "$SUITE" 2>&1 | tail -1)"; echo "baseline: $base"
 grep -qE "(^|[^0-9])0 failed" <<<"$base" || { echo "FATAL: not green before mutating"; exit 1; }
 
@@ -109,5 +111,22 @@ mutate "M11 headline counts as ground" \
 
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
-grep -qE "(^|[^0-9])0 failed" <<<"$after" || { echo "FATAL: source not restored"; exit 1; }
+# 🔴 Restoration is a property of the FILE, and it is checked against the file.
+# This used to key on the suite being green, which conflates two different
+# outcomes: on 2026-09-10 a flaky arm made this print "the tree is dirty, do not
+# commit" while `cmp` said the source was byte-identical to the pristine copy.
+# A harness that reports a red suite as an unrestored tree sends you looking for
+# a mutation that is not there.
+if cmp -s "$PRISTINE" "$SRC"; then
+  echo "restored: source is byte-identical to the pristine copy"
+else
+  echo "FATAL: SOURCE NOT RESTORED — $SRC differs from the copy taken before mutating."
+  echo "       Recover it with: cp \"$PRISTINE\" \"$SRC\"  (do this before anything else)"
+  diff -u "$PRISTINE" "$SRC" | head -20
+  exit 1
+fi
+# A red suite on a restored source is a SEPARATE finding, and usually a flaky
+# arm. Reported as itself, never as a restoration failure.
+grep -qE "(^|[^0-9])0 failed" <<<"$after" \
+  || { echo "WARNING: the suite is red on the restored source — $after"; echo "         Not a restoration failure. Run the suite alone before believing it."; RC=1; }
 exit $RC
