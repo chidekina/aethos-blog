@@ -375,13 +375,38 @@ latest episode`, `Hint--it's in Explore & Expand`, 7 more) is just as groundless
 in principle and is **named, not swept in**, because nothing has measured it
 producing a bad line.
 
-**Where that leaves the default.** §3b's two model wins were boilerplate removal
-and compression. Boilerplate is now deterministic; compression already was
-(`trimToBoundary`). The three inventions §3b measured are not, and this section
-adds a fourth shape that the check provably cannot see. The evidence for
-flipping the default is stronger than it was, and flipping it is still an
-operator decision — a published pipeline's default is not changed by the process
-that measured it.
+### 3d. DECIDED 2026-09-09 — the model step is opt-in
+
+§3b's two model wins were boilerplate removal and compression. Boilerplate is
+deterministic as of §3c; compression already was (`trimToBoundary`). What stayed
+on the model's side of the ledger is three inventions in eight (§3b) plus the
+shape §3c added, which no grounding check can catch. Contribution to **published**
+prose, measured on edition 1: **zero** — not one model sentence survived the
+human pass.
+
+The operator flipped it on that evidence.
+
+```bash
+node scripts/news/fetch-news.mjs           # deterministic excerpts — the default
+node scripts/news/fetch-news.mjs --llm     # summarise through Ollama, opt-in
+node scripts/news/fetch-news.mjs --no-llm  # still accepted, now a no-op
+```
+
+`--no-llm` is kept deliberately: every script, cron entry and test arm that
+passes it keeps working and keeps meaning what it says. Dropping it from
+`KNOWN_FLAGS` would turn those callers into exit 2 — a broken instrument, not a
+verdict — and there is a mutation asserting exactly that.
+
+🔴 **The weekly digest is now deterministic**, so a wedged or missing Ollama can
+no longer stop it. The diagnostics built for that failure (`ARM 14`, `16`, `17`)
+still exist and now run under `--llm`, because an arm that tests the model path
+has to ask for the model path. Two of them had been passing without asking —
+green for the wrong reason.
+
+🔴 **Reversing this is one flag, and should follow a measurement the same way
+flipping it did.** The comparison to make is on a real edition with the strip
+and the ground floor active, not against §3b's 09-04 numbers, which were taken
+against a weaker fallback.
 
 ```bash
 bash scripts/news/excerpt.test.sh        # the strip and the ground floor

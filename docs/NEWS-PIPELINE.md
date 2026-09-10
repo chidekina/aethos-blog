@@ -160,6 +160,30 @@ logged `DIGEST_OK ... drafts written`. It now logs `NOTHING_WRITTEN` and exits
 1. That was exactly the false-green this pipeline exists to avoid, sitting in
 the pipeline itself.
 
+## The model step is opt-in (decided 2026-09-09)
+
+```bash
+node scripts/news/fetch-news.mjs           # deterministic feed excerpts — the DEFAULT
+node scripts/news/fetch-news.mjs --llm     # summarise through Ollama
+node scripts/news/fetch-news.mjs --no-llm  # still accepted, now a no-op
+```
+
+Evidence and the decision itself are in `DIGEST-EVAL.md` §3–§3d. The short
+version: the two things the local model was measurably better at are both
+deterministic now, and its contribution to published prose was measured at zero.
+
+`--no-llm` is kept so that every existing caller keeps working and keeps meaning
+what it says — dropping it would make those callers exit 2, which is a broken
+instrument rather than a verdict.
+
+🔴 **The weekly digest no longer depends on Ollama.** A wedged or absent model
+cannot stop it. That is the point of the change, and it also means the Ollama
+diagnostics below only run when you ask for `--llm`.
+
+🔴 With `--llm` and no usable model the run exits **2** and says so, rather than
+quietly emitting raw excerpts: you asked for the model, and silently giving you
+the other thing would be the opposite of what you asked for.
+
 ## Recomputing the boilerplate corpus
 
 Every frequency in `excerpt.mjs` and in `DIGEST-EVAL.md` §3c was measured on a
