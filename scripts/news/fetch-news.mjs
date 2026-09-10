@@ -17,7 +17,7 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 import { checkItem } from './check-entities.mjs';
-import { trimToBoundary, EXCERPT_BUDGET } from './excerpt.mjs';
+import { trimToBoundary, stripBoilerplate, EXCERPT_BUDGET } from './excerpt.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -538,7 +538,10 @@ for (const it of shortlist) {
       it.summaryPt = '';
     }
   }
-  const excerpt = trimToBoundary(it.summary, EXCERPT_BUDGET);
+  // Boilerplate comes off BEFORE the budget cut, or the headline the feed
+  // repeated eats the first 40 characters of a 220-character line and the
+  // reader pays for it twice — once in the heading, once in the excerpt.
+  const excerpt = trimToBoundary(stripBoilerplate(it.summary, it.title), EXCERPT_BUDGET);
   if (!it.summaryEn) it.summaryEn = excerpt || it.title;
   if (!it.summaryPt) it.summaryPt = it.summaryEn;
 }

@@ -52,6 +52,38 @@ mutate "M4 touches a line under budget" \
   "  if (s.length < 0) return s;" \
   "short line altered" || RC=1
 
+echo "M5 — the headline strip becomes a naive prefix cut (the version real data refutes)"
+mutate "M5 naive prefix strip" \
+  "  if (!/^[\\p{Lu}\\p{Nd}\"'“]/u.test(next)) return s;      // running sentence: keep" \
+  "  void next;" \
+  "naive prefix strip broke a sentence" || RC=1
+
+echo "M6 — the headline strip never fires"
+mutate "M6 headline strip disabled" \
+  "  if (head.slice(0, t.length).toLowerCase() !== t.toLowerCase()) return s;" \
+  "  if (true) return s;" \
+  "repeated headline survived" || RC=1
+
+echo "M7 — the publisher footer rule loses its anchor and its 'appeared first on'"
+mutate "M7 unanchored footer rule" \
+  "    .replace(/\\s*\\bThe post\\b[\\s\\S]{0,200}?\\bappeared first on\\b[^.!?]{0,60}[.!?]?\\s*\$/iu, '')" \
+  "    .replace(/\\s*\\bThe post\\b[\\s\\S]*/iu, '')" \
+  "unanchored footer rule ate real prose" || RC=1
+
+echo "M8 — the greeting rule stops requiring 'here'"
+mutate "M8 greeting rule too broad" \
+  "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,60}\\bhere\\b[^.!?]{0,24}[.!?\\\\]*\\s*/iu, '')" \
+  "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,84}[.!?\\\\]*\\s*/iu, '')" \
+  "greeting rule too broad" || RC=1
+
+echo "M9 — boilerplate is stripped AFTER the budget cut instead of before"
+mutate "M9 wrong composition order" \
+  "export function stripBoilerplate(text, title) {
+  return stripRepeatedTitle(stripFeedFurniture(text), title);" \
+  "export function stripBoilerplate(text, title) {
+  void title; return String(text ?? '');" \
+  "headline still consumed the budget" || RC=1
+
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
 grep -qE "(^|[^0-9])0 failed" <<<"$after" || { echo "FATAL: source not restored"; exit 1; }
