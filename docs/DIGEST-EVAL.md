@@ -461,8 +461,51 @@ class this section is about, not the survival rate.
 flipping it did.** The comparison to make is on a real edition with the strip
 and the ground floor active, not against §3b's 09-04 numbers, which were taken
 against a weaker fallback. Running one edition with `--llm` against the same
-shortlist would settle it; the shortlist is in the edition record, so it can be
-replayed rather than waited for.
+shortlist settles it; the shortlist is in the edition record, so it is replayed
+rather than waited for.
+
+🔴 **That sentence was false when it was written, and stayed false for a day.**
+`EDITIONS_DIR` was **write-only** in `fetch-news.mjs` — records went in, nothing
+ever read one back — so the capability this paragraph leaned on did not exist,
+and the comparison it recommends could not be run by anyone who followed it. A
+document can describe a capability into being believed without bringing it into
+being. `replay-edition.mjs` is the capability; this note is what it cost.
+
+```bash
+node scripts/news/replay-edition.mjs scripts/news/editions/<date>.json --samples 5
+node scripts/news/replay-edition.mjs <record> --json     # per-item, machine-readable
+bash scripts/news/replay-edition.test.sh                 # + .mutate.sh
+```
+
+🔴 Exit **2 is a BROKEN INSTRUMENT** — record unreadable, no recoverable ground,
+model unusable — never a verdict about the model. Exit 1 is a real finding. Do
+not chain it with `&&` as if 0 and 1 were the only outcomes.
+
+🔴 **A backfilled edition cannot be replayed, and the script refuses rather than
+pretending.** `2026-09-02.json` declares `sourceExcerpt: null` in all 8 items —
+the feeds moved on and the ground is gone. Replaying it would hand the model an
+empty prompt and grade the answer against nothing, which comes back looking like
+a clean run. `2026-09-10.json` is the only replayable record in the repo.
+
+🔴 **Quote a rate, never a single draw.** Measured 2026-09-10 over 40 generated
+lines, 5 samples on each of the 8 items of edition 2, with the strip and the
+ground floor active: **14 non-pass**, and 10 of those 14 are **two** items while
+four other items are 0/20. One item invents an attribution in 8 of 10 samples
+across two runs, with 696 characters of ground — the strip and the floor do not
+touch that class. The same item flips between `pass` and `fail` across samples,
+so edition 1's *zero survived* and edition 2's *5 of 8 survived* are both n=1
+draws. Neither number was ever load-bearing. Recompute before quoting:
+
+```bash
+node scripts/news/replay-edition.mjs scripts/news/editions/2026-09-10.json --samples 5
+```
+
+🔴 **What the ground floor demonstrably buys, measured in the same run:** the
+`This Week In React` item's recorded line was a wholly invented sentence that
+the entity check scored `pass` — the documented false negative, since the
+headline is legitimate ground. With the floor active it comes back
+`tautological`, 5 of 5. **A silent false pass became an honest non-verdict.**
+That is the floor's case; it is not a case that the model's line improved.
 
 ```bash
 bash scripts/news/excerpt.test.sh        # the strip and the ground floor
