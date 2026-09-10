@@ -2,10 +2,11 @@
 /**
  * AI/dev news digest — fetch, filter, summarize locally, emit MDX DRAFTS.
  *
- *   node scripts/news/fetch-news.mjs                # write EN + PT drafts
+ *   node scripts/news/fetch-news.mjs                # write EN + PT drafts (no model)
  *   node scripts/news/fetch-news.mjs --dry-run      # print the shortlist, write nothing
  *   node scripts/news/fetch-news.mjs --check-sources # probe every feed, write nothing
- *   node scripts/news/fetch-news.mjs --no-llm       # skip Ollama, use feed excerpts
+ *   node scripts/news/fetch-news.mjs --llm          # summarise through Ollama (opt-in)
+ *   node scripts/news/fetch-news.mjs --no-llm       # accepted, and now the default
  *
  * Nothing here publishes. Both files are written with `draft: true`, so they are
  * excluded from the build until a human flips the flag. See docs/NEWS-PIPELINE.md.
@@ -58,7 +59,7 @@ const argv = process.argv.slice(2);
 // sources.json instead and reported a clean sweep, so 38 candidate feeds were
 // "confirmed" without ever being fetched. A flag that is ignored produces a
 // confident answer about the wrong input, which is worse than an error.
-const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm']);
+const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm', '--llm']);
 const unknownFlags = argv.filter((a) => !KNOWN_FLAGS.has(a));
 if (unknownFlags.length > 0) {
   console.error(
@@ -71,7 +72,24 @@ if (unknownFlags.length > 0) {
 }
 const dryRun = argv.includes('--dry-run');
 const checkSources = argv.includes('--check-sources');
-const noLlm = argv.includes('--no-llm');
+/**
+ * 🔴 The model step is OPT-IN as of 2026-09-09, decided on measurement rather
+ * than preference. `--no-llm` is still accepted and is now a no-op, so every
+ * script, cron entry and test arm that passes it keeps working and keeps
+ * meaning what it says.
+ *
+ * The evidence is in DIGEST-EVAL.md §3 / §3b / §3c. In short: the two things the
+ * model was measurably better at were boilerplate removal and compression, and
+ * both are deterministic now — `stripBoilerplate` and `trimToBoundary`. What is
+ * left on the model's side of the ledger is three inventions in eight (§3b) and
+ * a fourth shape no grounding check can catch (§3c). Its contribution to
+ * PUBLISHED prose has been measured at zero: on edition 1, not one model
+ * sentence survived the human pass.
+ *
+ * Reversing this is one flag, and reversing it should follow a measurement the
+ * same way flipping it did.
+ */
+const noLlm = !argv.includes('--llm');
 
 const log = (...a) => console.log(`[news]`, ...a);
 function die(code, msg) { console.error(`[news] ${msg}`); process.exit(code); }
@@ -522,8 +540,9 @@ if (useLlm) {
   const alive = await ollamaAlive();
   if (!alive.ok) {
     die(2, `INSTRUMENT: Ollama unusable at ${OLLAMA_URL} — ${alive.reason}. ` +
-           `Start it (\`ollama serve\`) or rerun with --no-llm. Refusing to emit a digest whose ` +
-           `summaries would silently be raw feed excerpts.`);
+           `You asked for --llm explicitly, so falling back to feed excerpts would silently ` +
+           `give you the opposite of what you asked for. Start it (\`ollama serve\`), or drop ` +
+           `--llm to get the deterministic excerpts on purpose.`);
   }
 }
 

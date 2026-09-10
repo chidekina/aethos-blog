@@ -273,7 +273,7 @@ OSRV_PID=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OPORT/api/tags" >/dev/null && break; done
 
 OUT14="$(OLLAMA_URL="http://127.0.0.1:$OPORT" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen14.json" "$T/posts14")"; ST14=$?
+  run "$T/c1.json" "$T/seen14.json" "$T/posts14" --llm)"; ST14=$?
 kill "$OSRV_PID" 2>/dev/null
 [ "$ST14" = 2 ] && ok "catalogue-ok / generation-wedged -> exit 2" || bad "wedged runner -> exit 2" "got $ST14: $OUT14"
 has "$OUT14" "generation did not respond within" \
@@ -305,7 +305,7 @@ http.createServer((q,r)=>{
 OSRV2_PID=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OPORT2/api/tags" >/dev/null && break; done
 OUT14B="$(OLLAMA_URL="http://127.0.0.1:$OPORT2" NEWS_PROBE_TIMEOUT_MS=5000 \
-  run "$T/c1.json" "$T/seen14b.json" "$T/posts14b")"; ST14B=$?
+  run "$T/c1.json" "$T/seen14b.json" "$T/posts14b" --llm)"; ST14B=$?
 kill "$OSRV2_PID" 2>/dev/null
 [ "$ST14B" = 0 ] && ok "control: a responsive server passes the probe" || bad "control: responsive server passes" "got $ST14B — probe fails everything: ARM 14 proves nothing: $OUT14B"
 [ -d "$T/posts14b" ] && ok "control: drafts ARE written when generation works" || bad "control: drafts written" "probe blocked a healthy run"
@@ -379,7 +379,7 @@ http.createServer((q,r)=>{
 P16=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP16/api/tags" >/dev/null && break; done
 OUT16="$(OLLAMA_URL="http://127.0.0.1:$OP16" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen16.json" "$T/posts16")"; ST16=$?
+  run "$T/c1.json" "$T/seen16.json" "$T/posts16" --llm)"; ST16=$?
 kill "$P16" 2>/dev/null
 [ "$ST16" = 2 ] && ok "a blocked load is still exit 2" || bad "blocked load exit $ST16" "$OUT16"
 has "$OUT16" "ollama stop nomic-embed-text:latest" \
@@ -410,7 +410,7 @@ http.createServer((q,r)=>{
 P16B=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP16B/api/tags" >/dev/null && break; done
 OUT16B="$(OLLAMA_URL="http://127.0.0.1:$OP16B" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen16b.json" "$T/posts16b")"
+  run "$T/c1.json" "$T/seen16b.json" "$T/posts16b" --llm)"
 kill "$P16B" 2>/dev/null
 has "$OUT16B" "wedged rather than blocked" \
   && ok "only-ours-loaded flips the advice back to stopping ours" || bad "advice did not adapt" "$OUT16B"
@@ -440,7 +440,7 @@ http.createServer((q,r)=>{
 P17=$!
 for _ in $(seq 1 40); do curl -sf -m1 "http://127.0.0.1:$OP17/api/tags" >/dev/null && break; done
 OUT17="$(OLLAMA_URL="http://127.0.0.1:$OP17" NEWS_PROBE_TIMEOUT_MS=2000 \
-  run "$T/c1.json" "$T/seen17.json" "$T/posts17")"; ST17=$?
+  run "$T/c1.json" "$T/seen17.json" "$T/posts17" --llm)"; ST17=$?
 kill "$P17" 2>/dev/null
 [ "$ST17" = 2 ] && ok "an empty ps is still exit 2" || bad "empty ps exit $ST17" "$OUT17"
 has "$OUT17" "LOAD IS IN PROGRESS" \
@@ -455,6 +455,46 @@ has "$OUT17" "ollama stop llama3.2:3b" \
 has "$OUT17" "could NOT be read" \
   && bad "empty ps and unreadable ps render the same" "$OUT17" \
   || ok "control: an empty ps reads differently from an unreadable one"
+
+echo "ARM 18 - the model step is OPT-IN, and --no-llm still means what it says"
+# Decided 2026-09-09 on the evidence in DIGEST-EVAL 3/3b/3c. The three arms below
+# are all load-bearing together: without the --llm arm, a build that ignored the
+# flag entirely would pass; without the default arm, one that always called the
+# model would; without the --no-llm arm, dropping it from KNOWN_FLAGS would turn
+# every existing caller into exit 2, which is a broken instrument, not a verdict.
+#
+# OLLAMA_URL points at a port nothing listens on, so "did it try to reach the
+# model" is answerable from the exit code alone.
+DEAD="http://127.0.0.1:9"
+
+E18="$T/ed18"
+OUT18A="$(OLLAMA_URL="$DEAD" NEWS_EDITIONS_DIR="$E18" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen18a.json" NEWS_POSTS_DIR="$T/posts18a" node "$SCRIPT" 2>&1)"; ST18A=$?
+[ "$ST18A" -ne 2 ] \
+  && ok "default run does not reach for the model (exit $ST18A, not 2)" \
+  || bad "default still requires Ollama" "$OUT18A"
+
+OUT18B="$(OLLAMA_URL="$DEAD" NEWS_EDITIONS_DIR="$T/ed18b" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen18b.json" NEWS_POSTS_DIR="$T/posts18b" node "$SCRIPT" --llm 2>&1)"; ST18B=$?
+[ "$ST18B" -eq 2 ] \
+  && ok "--llm with no model is a broken instrument, exit 2" \
+  || bad "--llm did not reach for the model" "$OUT18B"
+# And it must say WHY in the terms the caller used, not tell them to pass a flag
+# they did not pass.
+has "$OUT18B" "You asked for --llm explicitly" \
+  && ok "and the message names what the caller actually asked for" || bad "stale --no-llm advice" "$OUT18B"
+
+OUT18C="$(OLLAMA_URL="$DEAD" NEWS_EDITIONS_DIR="$T/ed18c" NEWS_CONFIG="$T/c1.json" \
+  NEWS_SEEN="$T/seen18c.json" NEWS_POSTS_DIR="$T/posts18c" node "$SCRIPT" --no-llm 2>&1)"; ST18C=$?
+[ "$ST18C" -ne 2 ] \
+  && ok "--no-llm is still accepted and still skips the model" \
+  || bad "--no-llm became an unknown flag" "$OUT18C"
+# CONTROL: an actually-unknown flag must still be rejected, or the arm above
+# only proves that nothing is validated at all.
+OUT18D="$(NEWS_CONFIG="$T/c1.json" NEWS_SEEN="$T/seen18d.json" NEWS_POSTS_DIR="$T/posts18d" \
+  node "$SCRIPT" --zzz-not-a-flag 2>&1)"; ST18D=$?
+[ "$ST18D" -eq 2 ] \
+  && ok "control: an unknown flag is still rejected" || bad "flag validation is gone entirely" "$OUT18D"
 
 echo
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"

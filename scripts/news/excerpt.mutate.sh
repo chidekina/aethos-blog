@@ -23,7 +23,7 @@ PY
   local failed; failed="$(grep '^  FAIL' <<<"$out" | sed 's/^  FAIL //' | tr '\n' ';')"
   grep -qE "(^|[^0-9])0 failed" <<<"$out" && { echo "  SURVIVED  $name"; return 1; }
   echo "  killed    $name"; echo "            fails: $failed"
-  grep -qF "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
+  grep -qF -- "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
 }
 
 RC=0

@@ -43,7 +43,7 @@ PY
   fi
   echo "  killed    $name"
   echo "            fails: $failed"
-  grep -qF "$expect" <<<"$failed" \
+  grep -qF -- "$expect" <<<"$failed" \
     && echo "            and it is the expected arm" \
     || { echo "            WRONG ARM — expected: $expect"; return 1; }
 }

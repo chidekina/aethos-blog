@@ -53,7 +53,7 @@ PY
   green "$out" && { echo "  SURVIVED  $name"; return 1; }
   echo "  killed    $name"
   echo "            fails: $failed"
-  grep -qF "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
+  grep -qF -- "$expect" <<<"$failed" && echo "            expected arm" || { echo "            WRONG ARM"; return 1; }
 }
 
 RC=0
@@ -91,6 +91,26 @@ mutate "M4 our model counts as its own blocker" \
   "const others = holders.models.filter((m) => m.name !== OLLAMA_MODEL);" \
   "const others = holders.models.filter(() => true);" \
   "advice did not adapt" || RC=1   # ARM 16B: with only ours loaded the advice must flip back
+
+echo "M-OPTIN — the model step goes back to being the default"
+mutate "opt-in reverted" \
+  "const noLlm = !argv.includes('--llm');" \
+  "const noLlm = argv.includes('--no-llm');" \
+  "default still requires Ollama" || RC=1
+
+echo "M-FLAG — --llm is accepted but ignored"
+# Without this one, a build that parsed the flag and never acted on it would
+# pass the default arm and be caught by nothing else.
+mutate "llm flag inert" \
+  "const noLlm = !argv.includes('--llm');" \
+  "const noLlm = true;" \
+  "--llm did not reach for the model" || RC=1
+
+echo "M-KNOWN — --no-llm is dropped from the accepted flags"
+mutate "no-llm rejected" \
+  "const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm', '--llm']);" \
+  "const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--llm']);" \
+  "--no-llm became an unknown flag" || RC=1
 
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
