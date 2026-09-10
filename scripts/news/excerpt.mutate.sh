@@ -72,7 +72,7 @@ mutate "M7 unanchored footer rule" \
 
 echo "M8 — the greeting rule stops requiring 'here'"
 mutate "M8 greeting rule too broad" \
-  "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,60}\\bhere\\b[^.!?]{0,24}[.!?\\\\]*\\s*/iu, '')" \
+  "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,60}\\bhere\\b[^\\p{L}.!?]{0,24}[.!?\\\\]+\\s*/iu, '')" \
   "    .replace(/^\\s*(?:Hi|Hello|Hey)\\b[^.!?]{0,84}[.!?\\\\]*\\s*/iu, '')" \
   "greeting rule too broad" || RC=1
 
@@ -89,6 +89,17 @@ mutate "M10 ground floor disabled" \
   "  if (!body) return false;" \
   "  if (!body) return true;" \
   "a groundless excerpt would reach the model" || RC=1
+
+echo "M12 — the greeting tail loses its boundary (the form that shipped in this PR and ate prose)"
+# 🔴 Not a hypothetical mutation: this is the exact regex that was reviewed and
+# corrected. It strips a greeting that runs on into a real sentence, and cuts at
+# whatever character 24 happens to be -- 'han the old one.' -- BEFORE
+# trimToBoundary, whose contract is that a cut never lands mid-word. M8 does not
+# cover it: M8 removes the `here` requirement, and this form keeps it.
+mutate "M12 greeting tail unbounded" \
+  '\bhere\b[^\p{L}.!?]{0,24}[.!?\\]+\s*' \
+  '\bhere\b[^.!?]{0,24}[.!?\\]*\s*' \
+  "greeting rule ate a real sentence" || RC=1
 
 echo "M11 — the headline-is-not-ground branch is dropped (the first version of this predicate)"
 mutate "M11 headline counts as ground" \

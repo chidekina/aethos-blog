@@ -90,7 +90,33 @@ export function stripFeedFurniture(text) {
     // "Hi everyone, Seb and Jan here 👋!" — measured 3/94, always the opening.
     // `here` is required: without it the pattern is just a greeting word and
     // would eat the first sentence of anything starting with "Hi".
-    .replace(/^\s*(?:Hi|Hello|Hey)\b[^.!?]{0,60}\bhere\b[^.!?]{0,24}[.!?\\]*\s*/iu, '')
+    //
+    // 🔴 The tail is `[^\p{L}...]` and the terminator is `+`, not `*`, and both
+    // halves are load-bearing. The first version read `[^.!?]{0,24}[.!?\\]*`,
+    // which matches 24 characters of ANYTHING and needs no terminator at all —
+    // so a greeting that runs on into a real sentence was stripped, and the cut
+    // landed wherever 24 characters ended:
+    //
+    //   "Hi folks, the new parser is here and it is much faster than the old
+    //    one. Details follow."           ->  "han the old one. Details follow."
+    //
+    // Mid-word, and BEFORE `trimToBoundary`, whose whole contract is that a cut
+    // never lands mid-word — so the downstream guarantee cannot repair it.
+    //
+    // The greeting this removes is a COMPLETE opening unit: after `here` come
+    // only non-letters (emoji, space, punctuation) and then a real terminator.
+    // A greeting that continues into more words is not feed furniture, it is
+    // the item's first sentence, and the strip must keep its hands off it.
+    //
+    // 🔴 The obvious fix does not work. Forbidding letters in the tail while
+    // leaving the terminator optional still strips — it just cuts less, landing
+    // on "and it ships today. ...". Both changes are needed; either alone
+    // leaves a rule that eats prose.
+    //
+    // This is the same trade the `Today is … day .` rule was REJECTED for: one
+    // excerpt gained against a false positive on plausible prose. That rule was
+    // kept out and this one shipped, which is the inconsistency being closed.
+    .replace(/^\s*(?:Hi|Hello|Hey)\b[^.!?]{0,60}\bhere\b[^\p{L}.!?]{0,24}[.!?\\]+\s*/iu, '')
     .trim();
 }
 
