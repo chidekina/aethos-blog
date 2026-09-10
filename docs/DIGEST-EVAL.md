@@ -403,10 +403,30 @@ still exist and now run under `--llm`, because an arm that tests the model path
 has to ask for the model path. Two of them had been passing without asking —
 green for the wrong reason.
 
+🔴 **Edition 2 argues the other way, and it landed the same day.** The
+2026-09-10 edition — the first through the scheduler, and the last one produced
+with the model on — recorded **5 of 8 EN lines surviving the human review
+verbatim**. Edition 1's figure was **zero**, and that zero is half of what this
+decision rests on.
+
+```bash
+node -e "const r=require('./scripts/news/editions/2026-09-10.json');
+  console.log(r.items.filter(i=>i.publishedEn===i.summaryEn).length+'/'+r.items.length)"
+```
+
+The decision is not reversed on it: n=1 against n=1, and edition 1's zero was
+itself a single edition. It is recorded because the alternative is a document
+arguing from the half of the evidence that agrees with it — and because the
+three lines that DID need rewriting in edition 2 were an invented attribution,
+an invented claim, and a paragraph written from a greeting, which is the failure
+class this section is about, not the survival rate.
+
 🔴 **Reversing this is one flag, and should follow a measurement the same way
 flipping it did.** The comparison to make is on a real edition with the strip
 and the ground floor active, not against §3b's 09-04 numbers, which were taken
-against a weaker fallback.
+against a weaker fallback. Running one edition with `--llm` against the same
+shortlist would settle it; the shortlist is in the edition record, so it can be
+replayed rather than waited for.
 
 ```bash
 bash scripts/news/excerpt.test.sh        # the strip and the ground floor
