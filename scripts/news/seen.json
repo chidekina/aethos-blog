@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-02T19:59:27.296Z",
+  "updatedAt": "2026-09-10T01:20:16.012Z",
   "links": [
     "https://simonwillison.net/2026/Sep/1/claude-fable-5-1/",
     "https://developers.googleblog.com/enterprise-grade-precision-for-long-context-multimodal-embedding-inference-on-cloud-tpu/",
@@ -8,6 +8,14 @@
     "https://www.theverge.com/ai-artificial-intelligence/988334/openai-astra-ai-monitoring-safety",
     "https://martinfowler.com/fragments/2026-09-01.html",
     "https://github.blog/changelog/2026-09-01-claude-fable-5-1-generally-available-in-github-copilot",
-    "https://developers.googleblog.com/a-unified-api-for-ai-model-routing/"
+    "https://developers.googleblog.com/a-unified-api-for-ai-model-routing/",
+    "https://simonwillison.net/2026/Sep/8/on-navier-stokes/",
+    "https://simonwillison.net/2026/Sep/8/introducing-chatgpt-images-25/",
+    "https://simonwillison.net/2026/Sep/5/introducing-gpt-6-astra-for-developers/",
+    "https://developers.googleblog.com/driving-developer-excellence-inside-the-program-sprints/",
+    "https://developers.googleblog.com/4-engineering-patterns-behind-the-strongest-ai-agents-challenge-submissions/",
+    "https://www.akitaonrails.com/2026/09/02/ai-memory-2-0-melhor-sistema-memoria-agentes-e-times/",
+    "https://thisweekinreact.com/newsletter/296",
+    "https://opentelemetry.io/blog/2026/genai-observability/"
   ]
 }
