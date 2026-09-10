@@ -131,11 +131,20 @@ console.log('greeting='+stripFeedFurniture('Hi everyone, Seb and Jan here! React
 console.log('prose='+stripFeedFurniture('The post office closed early, so the release slipped a day.'));
 // NEGATIVE: a greeting without the trailing 'here' is not the newsletter shape.
 console.log('hi='+stripFeedFurniture('Hi there, this release fixes three bugs.'));
+// NEGATIVE: a greeting that RUNS ON into a real sentence is not furniture. Both
+// of these were stripped by the first version of the rule, and the second was
+// cut MID-WORD -- 'han the old one.' -- because the tail matched 24 characters
+// of anything with no boundary. Every fixture above is a true positive, which
+// is exactly why the suite was green while the rule ate prose.
+console.log('runon1='+stripFeedFurniture('Hi everyone, the release is here and it ships today. It also fixes a leak.'));
+console.log('runon2='+stripFeedFurniture('Hi folks, the new parser is here and it is much faster than the old one. Details follow.'));
 " 2>&1)"
 has "$out" "footer=CodeQL now supports Linux ARM64 runners." && ok "the WordPress footer is removed" || bad "footer survived or ate the body" "$out"
 has "$out" "greeting=React 19.3 is out with a new compiler." && ok "the newsletter greeting is removed" || bad "greeting survived or ate the body" "$out"
 has "$out" "prose=The post office closed early" && ok "'The post' in ordinary prose is untouched" || bad "unanchored footer rule ate real prose" "$out"
 has "$out" "hi=Hi there, this release fixes three bugs." && ok "a greeting without 'here' is not the shape" || bad "greeting rule too broad" "$out"
+has "$out" "runon1=Hi everyone, the release is here and it ships today." && ok "a greeting running into a sentence is left whole" || bad "greeting rule ate a real sentence" "$out"
+has "$out" "runon2=Hi folks, the new parser is here and it is much faster" && ok "and the run-on case is not cut mid-word" || bad "greeting rule cut mid-word, before trimToBoundary could not fix it" "$out"
 
 echo "ARM 8 — boilerplate comes off BEFORE the budget cut"
 # Order matters: 220 characters spent on a repeated headline is 220 characters

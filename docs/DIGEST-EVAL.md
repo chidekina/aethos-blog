@@ -305,6 +305,41 @@ not on fixtures:
 | newsletter greeting | 3/94 | yes |
 | `Today is … day .` | **1/94** | **no — see below** |
 
+🔴 **The greeting rule shipped with the very defect `Today is … day .` was
+rejected for, and it was caught in review rather than by the suite.** Its first
+form ended `\bhere\b[^.!?]{0,24}[.!?\\]*` — 24 characters of anything, and no
+required terminator — so a greeting that runs on into a real sentence was
+stripped, and the cut landed wherever character 24 fell:
+
+```
+in : "Hi folks, the new parser is here and it is much faster than the old one. Details follow."
+out: "han the old one. Details follow."
+```
+
+Mid-word, and **before** `trimToBoundary`, whose whole contract is that a cut
+never lands mid-word — so the downstream guarantee could not repair it. The
+greeting now removed must be a COMPLETE opening unit: after `here`, only
+non-letters and then a real terminator.
+
+🔴 **The obvious fix is wrong.** Forbidding letters in the tail while leaving the
+terminator optional still strips, just cutting less — landing on
+`"and it ships today. …"`. Both halves are needed.
+
+> **Every fixture for this rule was a true positive, which is why 29/0 said
+> nothing about it.** The two arms that close it assert a `Hi … here …` sentence
+> **survives**; `M12` restores the shipped form and kills exactly those two.
+> Re-anchoring moved `M8`'s target line and the harness reported `ANCHOR MISSED`
+> rather than a green run — the only reason that mutation was not silently
+> retired.
+
+🔴 **The `3/94` above is NOT recomputed against the narrower rule.** The corpus
+is not tracked — it is pulled live, and the command is in `NEWS-PIPELINE.md`, so
+the number stands as measured against the permissive form. What could be checked
+was: on the 8 excerpts of the 2026-09-10 record, old and new strip **the same
+one**, and no item diverges. Small n, and stated as such. The control that makes
+that zero readable is that the two regexes provably diverge on the prose case in
+the same run — without it, "no divergence" and "blind comparison" print alike.
+
 18 of 94 excerpts change. The headline rule is not a prefix cut: in
 `Introducing GeneBench-Pro, a new benchmark testing…` the headline *is* the
 opening of a running sentence, and cutting it leaves the line starting at
