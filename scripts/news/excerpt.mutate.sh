@@ -84,6 +84,18 @@ mutate "M9 wrong composition order" \
   void title; return String(text ?? '');" \
   "headline still consumed the budget" || RC=1
 
+echo "M10 — the ground floor answers true to everything"
+mutate "M10 ground floor disabled" \
+  "  if (!body) return false;" \
+  "  if (!body) return true;" \
+  "a groundless excerpt would reach the model" || RC=1
+
+echo "M11 — the headline-is-not-ground branch is dropped (the first version of this predicate)"
+mutate "M11 headline counts as ground" \
+  "  return norm(body) !== norm(String(title ?? ''));" \
+  "  return true;" \
+  "headline counted as its own ground" || RC=1
+
 echo
 after="$(bash "$SUITE" 2>&1 | tail -1)"; echo "restored: $after"
 grep -qE "(^|[^0-9])0 failed" <<<"$after" || { echo "FATAL: source not restored"; exit 1; }

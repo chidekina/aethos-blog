@@ -17,7 +17,7 @@
  */
 import { XMLParser } from 'fast-xml-parser';
 import { checkItem } from './check-entities.mjs';
-import { trimToBoundary, stripBoilerplate, EXCERPT_BUDGET } from './excerpt.mjs';
+import { trimToBoundary, stripBoilerplate, hasSummarisableGround, EXCERPT_BUDGET } from './excerpt.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -528,7 +528,12 @@ if (useLlm) {
 }
 
 for (const it of shortlist) {
-  if (useLlm) {
+  if (useLlm && !hasSummarisableGround(it.summary, it.title)) {
+    log(`NO GROUND "${it.title}" — the feed excerpt is empty once boilerplate is removed, ` +
+        `so the model would be writing from the headline alone. Using the headline itself.`);
+    it.summaryEn = it.title;
+    it.summaryPt = it.title;
+  } else if (useLlm) {
     try {
       it.summaryEn = await summarizeEn(it);
       it.summaryPt = await translatePt(it.summaryEn);
