@@ -289,6 +289,75 @@ diff <(grep -oE 'https?://[^)]+' $D/a/posts/*[!t].mdx | sort) \
      <(grep -oE 'https?://[^)]+' $D/b/posts/*[!t].mdx | sort) && echo "same items"
 ```
 
+### 3c. The two blockers on §3b are closed — measured 2026-09-09
+
+§3b left the `--no-llm` default "blocked only on a deterministic boilerplate
+strip". That strip exists now, and building it turned up a third thing neither
+lane had seen.
+
+**The strip.** Measured on **94 real excerpts** pulled through the real pipeline,
+not on fixtures:
+
+| rule | hits | shipped |
+|---|---:|---|
+| headline repeated at the head | 10/94 | yes |
+| `The post … appeared first on …` | 5/94 | yes |
+| newsletter greeting | 3/94 | yes |
+| `Today is … day .` | **1/94** | **no — see below** |
+
+18 of 94 excerpts change. The headline rule is not a prefix cut: in
+`Introducing GeneBench-Pro, a new benchmark testing…` the headline *is* the
+opening of a running sentence, and cutting it leaves the line starting at
+`, a new benchmark…`. It fires only when what follows begins a new sentence.
+
+🔴 **`Today is … day .` was first measured at 0/94, and that zero was wrong.**
+The predicate was `` `Today is[^.]{0,60}day` `` and the one real instance is
+`Today is Claude Fable (and Mythos) 5.1 day .` — the version number carries a
+dot, so the negated class stopped before `day`. A zero from a blind predicate
+reads exactly like a zero from a clean corpus. With a dot-tolerant predicate the
+rule works and also eats `Today is a good day to ship, and the release notes are
+long.` One excerpt against a false positive on ordinary prose is a bad trade, so
+it stays out — named, not omitted.
+
+**The thing neither lane could see.** The whole feed excerpt for
+`This Week In React #296` was `Hi everyone, Seb and Jan here 👋\!`. The model
+returned *"React 19.3 has been released with several new features and
+improvements, including better DevTools support and performance enhancements
+that should benefit developers using the library in their applications."*
+
+`19.3` and `DevTools` came from the **title**, which is a legitimate ground, so
+the grounding lanes passed it. `performance enhancements` came from nowhere.
+
+> **A grounding check cannot catch invention when the ground is a headline.**
+> The lane is asking "is this token in the source?", and every distinctive token
+> was. What went wrong is that a headline plus a greeting cannot support three
+> clauses of claim, and no per-token question asks that.
+
+Closed at the source rather than in the check: an item whose excerpt is empty
+once boilerplate comes off is no longer handed to the model at all — 3 of 94,
+and it is the proven-defective set. The 60-character band below it (`Stream the
+latest episode`, `Hint--it's in Explore & Expand`, 7 more) is just as groundless
+in principle and is **named, not swept in**, because nothing has measured it
+producing a bad line.
+
+**Where that leaves the default.** §3b's two model wins were boilerplate removal
+and compression. Boilerplate is now deterministic; compression already was
+(`trimToBoundary`). The three inventions §3b measured are not, and this section
+adds a fourth shape that the check provably cannot see. The evidence for
+flipping the default is stronger than it was, and flipping it is still an
+operator decision — a published pipeline's default is not changed by the process
+that measured it.
+
+```bash
+bash scripts/news/excerpt.test.sh        # the strip and the ground floor
+bash scripts/news/excerpt.mutate.sh      # each rule killed by its own mutation
+bash scripts/news/check-entities.test.sh # the entity lanes
+```
+
+🔴 Recompute the table before trusting it. Feeds change, and the corpus command
+is in `NEWS-PIPELINE.md` — a count in prose with no recompute beside it is the
+defect this whole document is about.
+
 ### 4. Everything else waits
 
 Building a faithfulness judge for prose that may be deleted is optimizing a step
