@@ -375,7 +375,7 @@ latest episode`, `Hint--it's in Explore & Expand`, 7 more) is just as groundless
 in principle and is **named, not swept in**, because nothing has measured it
 producing a bad line.
 
-### 3d. DECIDED 2026-09-09 — the model step is opt-in
+### 3d. DECIDED 2026-09-09 — summarisation is opt-in, translation stays
 
 §3b's two model wins were boilerplate removal and compression. Boilerplate is
 deterministic as of §3c; compression already was (`trimToBoundary`). What stayed
@@ -384,18 +384,54 @@ shape §3c added, which no grounding check can catch. Contribution to **publishe
 prose, measured on edition 1: **zero** — not one model sentence survived the
 human pass.
 
-The operator flipped it on that evidence.
+The operator flipped it on that evidence — and then it had to be flipped
+**half back**, within hours, for a reason none of §3, §3b or §3c had looked at.
+
+🔴 **The one-flag version shipped a monolingual PT edition.** With the model off,
+`summaryPt` is assigned `summaryEn`. Measured on a 94-item corpus: **94 of 94 PT
+lines byte-identical to their EN lines** — the Portuguese edition of a bilingual
+blog, in English, under a translated intro paragraph.
 
 ```bash
-node scripts/news/fetch-news.mjs           # deterministic excerpts — the default
-node scripts/news/fetch-news.mjs --llm     # summarise through Ollama, opt-in
-node scripts/news/fetch-news.mjs --no-llm  # still accepted, now a no-op
+node -e "const r=require('./scripts/news/editions/<date>.json');
+  console.log(r.items.filter(i=>i.summaryPt===i.summaryEn).length+'/'+r.items.length)"
 ```
 
-`--no-llm` is kept deliberately: every script, cron entry and test arm that
-passes it keeps working and keeps meaning what it says. Dropping it from
-`KNOWN_FLAGS` would turn those callers into exit 2 — a broken instrument, not a
-verdict — and there is a mutation asserting exactly that.
+> **Every section above compared EN line quality, so every section above missed
+> it.** The measurements were sound and the question was too narrow: "is the
+> model's sentence better than the excerpt?" never asks "what happens to the
+> other language?". A decision is only as wide as the question that produced it.
+
+So the two model steps are now two decisions, because the evidence separates
+them. The measured case is entirely about **summarisation**. There is no such
+record against **translation**, and removing it breaks the deliverable outright.
+
+```bash
+node scripts/news/fetch-news.mjs                 # deterministic EN, translated PT — the DEFAULT
+node scripts/news/fetch-news.mjs --llm-summary   # let the model write the EN line
+node scripts/news/fetch-news.mjs --no-translate  # skip translation
+node scripts/news/fetch-news.mjs --llm           # both, the old meaning
+node scripts/news/fetch-news.mjs --no-llm        # neither, the old meaning
+```
+
+`--llm` and `--no-llm` keep their old meanings so every script, cron entry and
+test arm that passes them keeps working and keeps meaning what it says. Dropping
+`--no-llm` from `KNOWN_FLAGS` would turn those callers into exit 2 — a broken
+instrument, not a verdict — and there is a mutation asserting that.
+
+🔴 **The two halves fail differently, on purpose.** `--llm-summary` with no model
+**exits 2**: you asked for it, and silently handing back excerpts is the opposite
+of what you asked. Translation alone **degrades and says so**, because a weekly
+draft in one language beats no draft — but a *quietly* monolingual one is worse
+than nothing, since it reads as translated. Every run prints
+`TRANSLATED n/m`, including the good one, and every item carries `translated`
+into the edition record.
+
+🔴 The count line is printed on success too, and that is load-bearing. A mutation
+that printed it only on failure **survived its first run**: every translation arm
+ran against a dead Ollama, so no arm ever reached a run where nothing went wrong.
+ARM 20 stubs a model that answers. A mutation surviving is a statement about the
+suite, not about the code.
 
 🔴 **The weekly digest is now deterministic**, so a wedged or missing Ollama can
 no longer stop it. The diagnostics built for that failure (`ARM 14`, `16`, `17`)

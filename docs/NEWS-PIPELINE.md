@@ -160,29 +160,42 @@ logged `DIGEST_OK ... drafts written`. It now logs `NOTHING_WRITTEN` and exits
 1. That was exactly the false-green this pipeline exists to avoid, sitting in
 the pipeline itself.
 
-## The model step is opt-in (decided 2026-09-09)
+## Two model steps, two flags (decided 2026-09-09)
 
 ```bash
-node scripts/news/fetch-news.mjs           # deterministic feed excerpts — the DEFAULT
-node scripts/news/fetch-news.mjs --llm     # summarise through Ollama
-node scripts/news/fetch-news.mjs --no-llm  # still accepted, now a no-op
+node scripts/news/fetch-news.mjs                 # deterministic EN, translated PT — the DEFAULT
+node scripts/news/fetch-news.mjs --llm-summary   # let the model write the EN line
+node scripts/news/fetch-news.mjs --no-translate  # skip the PT translation
+node scripts/news/fetch-news.mjs --llm           # both, the old meaning
+node scripts/news/fetch-news.mjs --no-llm        # neither, the old meaning
 ```
 
-Evidence and the decision itself are in `DIGEST-EVAL.md` §3–§3d. The short
-version: the two things the local model was measurably better at are both
-deterministic now, and its contribution to published prose was measured at zero.
+Evidence and the decision are in `DIGEST-EVAL.md` §3–§3d. Short version: the
+measured case against the model is entirely about **summarisation**; there is no
+such record against **translation**, and removing it left 94 of 94 PT lines
+byte-identical to their EN lines — the Portuguese edition, in English.
 
-`--no-llm` is kept so that every existing caller keeps working and keeps meaning
-what it says — dropping it would make those callers exit 2, which is a broken
-instrument rather than a verdict.
+🔴 **The two halves fail differently.** `--llm-summary` with no usable model
+**exits 2** — you asked for it, and quietly handing back excerpts is the opposite
+of what you asked. Translation alone **degrades and says so**: a weekly draft in
+one language beats no draft, but a quietly monolingual one is worse than nothing
+because it reads as translated.
 
-🔴 **The weekly digest no longer depends on Ollama.** A wedged or absent model
-cannot stop it. That is the point of the change, and it also means the Ollama
-diagnostics below only run when you ask for `--llm`.
+**Reading a weekly log, this is the line that matters:**
 
-🔴 With `--llm` and no usable model the run exits **2** and says so, rather than
-quietly emitting raw excerpts: you asked for the model, and silently giving you
-the other thing would be the opposite of what you asked for.
+```bash
+grep 'TRANSLATED' scripts/news/digest.log | tail -3      # printed EVERY run, good or bad
+grep -c 'TRANSLATION UNAVAILABLE' scripts/news/digest.log
+```
+
+`TRANSLATED n/m` is printed on the successful run too, deliberately: a line that
+only appears on failure is a line nobody has learned to look for. `n` short of
+`m` means that many PT lines are COPIES of the EN line — **do not publish that
+draft as-is**.
+
+Per item, the edition record carries `translated`. It is what was *attempted*;
+`summaryPt !== summaryEn` is what came *out*. They answer different questions
+and a short line can survive translation unchanged, so the record keeps both.
 
 ## Recomputing the boilerplate corpus
 

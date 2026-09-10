@@ -5,8 +5,10 @@
  *   node scripts/news/fetch-news.mjs                # write EN + PT drafts (no model)
  *   node scripts/news/fetch-news.mjs --dry-run      # print the shortlist, write nothing
  *   node scripts/news/fetch-news.mjs --check-sources # probe every feed, write nothing
- *   node scripts/news/fetch-news.mjs --llm          # summarise through Ollama (opt-in)
- *   node scripts/news/fetch-news.mjs --no-llm       # accepted, and now the default
+ *   node scripts/news/fetch-news.mjs --llm-summary  # let the model write the EN line
+ *   node scripts/news/fetch-news.mjs --no-translate # skip the PT translation
+ *   node scripts/news/fetch-news.mjs --llm          # both, the old meaning
+ *   node scripts/news/fetch-news.mjs --no-llm       # neither, the old meaning
  *
  * Nothing here publishes. Both files are written with `draft: true`, so they are
  * excluded from the build until a human flips the flag. See docs/NEWS-PIPELINE.md.
@@ -59,7 +61,7 @@ const argv = process.argv.slice(2);
 // sources.json instead and reported a clean sweep, so 38 candidate feeds were
 // "confirmed" without ever being fetched. A flag that is ignored produces a
 // confident answer about the wrong input, which is worse than an error.
-const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm', '--llm']);
+const KNOWN_FLAGS = new Set(['--dry-run', '--check-sources', '--no-llm', '--llm', '--llm-summary', '--no-translate']);
 const unknownFlags = argv.filter((a) => !KNOWN_FLAGS.has(a));
 if (unknownFlags.length > 0) {
   console.error(
@@ -73,23 +75,34 @@ if (unknownFlags.length > 0) {
 const dryRun = argv.includes('--dry-run');
 const checkSources = argv.includes('--check-sources');
 /**
- * 🔴 The model step is OPT-IN as of 2026-09-09, decided on measurement rather
- * than preference. `--no-llm` is still accepted and is now a no-op, so every
- * script, cron entry and test arm that passes it keeps working and keeps
- * meaning what it says.
+ * ── Two model steps, two decisions ──────────────────────────────────────────
  *
- * The evidence is in DIGEST-EVAL.md §3 / §3b / §3c. In short: the two things the
- * model was measurably better at were boilerplate removal and compression, and
- * both are deterministic now — `stripBoilerplate` and `trimToBoundary`. What is
- * left on the model's side of the ledger is three inventions in eight (§3b) and
- * a fourth shape no grounding check can catch (§3c). Its contribution to
- * PUBLISHED prose has been measured at zero: on edition 1, not one model
- * sentence survived the human pass.
+ * SUMMARISATION is opt-in (`--llm-summary`). TRANSLATION is on by default
+ * (`--no-translate` turns it off). They were one flag for a day, and separating
+ * them is what the evidence actually supports.
  *
- * Reversing this is one flag, and reversing it should follow a measurement the
- * same way flipping it did.
+ * The measured case against the model is entirely about SUMMARISATION:
+ * DIGEST-EVAL §3b's three inventions in eight, and §3c's paragraph written from
+ * a greeting. Both wins the model had there — boilerplate removal and
+ * compression — are deterministic now (`stripBoilerplate`, `trimToBoundary`).
+ *
+ * 🔴 There is no such record against TRANSLATION, and removing it breaks the
+ * deliverable outright. Measured 2026-09-09 on a 94-item corpus: with both steps
+ * off, **94 of 94 PT lines were byte-identical to their EN lines** — the PT
+ * edition of a bilingual blog comes out in English, under a translated intro
+ * paragraph. The one-flag version shipped that for a few hours. It was not
+ * caught by §3b or §3c because both compared EN line quality only.
+ *
+ * ```bash
+ * node -e "const r=require('./scripts/news/editions/<date>.json');
+ *   console.log(r.items.filter(i=>i.summaryPt===i.summaryEn).length+'/'+r.items.length)"
+ * ```
+ *
+ * `--llm` and `--no-llm` keep their old meanings — both on, both off — so every
+ * existing caller keeps working and keeps meaning what it says.
  */
-const noLlm = !argv.includes('--llm');
+const wantSummary = argv.includes('--llm') || argv.includes('--llm-summary');
+const wantTranslate = !argv.includes('--no-llm') && !argv.includes('--no-translate');
 
 const log = (...a) => console.log(`[news]`, ...a);
 function die(code, msg) { console.error(`[news] ${msg}`); process.exit(code); }
@@ -535,31 +548,44 @@ if (dryRun) {
 }
 
 // Summaries
-let useLlm = !noLlm;
-if (useLlm) {
+let useSummary = wantSummary;
+let useTranslate = wantTranslate;
+if (useSummary || useTranslate) {
   const alive = await ollamaAlive();
   if (!alive.ok) {
-    die(2, `INSTRUMENT: Ollama unusable at ${OLLAMA_URL} — ${alive.reason}. ` +
-           `You asked for --llm explicitly, so falling back to feed excerpts would silently ` +
-           `give you the opposite of what you asked for. Start it (\`ollama serve\`), or drop ` +
-           `--llm to get the deterministic excerpts on purpose.`);
+    // Asked for on purpose -> refuse. Silently handing back the other thing is
+    // the opposite of what the caller asked for.
+    if (useSummary) {
+      die(2, `INSTRUMENT: Ollama unusable at ${OLLAMA_URL} — ${alive.reason}. ` +
+             `You asked the model to write the summaries, so falling back to feed excerpts ` +
+             `would silently give you the opposite. Start it (\`ollama serve\`), or drop ` +
+             `--llm-summary to get the deterministic excerpts on purpose.`);
+    }
+    // 🔴 Translation alone degrades rather than dies, and it is COUNTED. A weekly
+    // draft that exists in one language is worth more than no draft; a weekly
+    // draft that is quietly monolingual is worth less than nothing, because it
+    // reads as translated. The count goes to the log and every item carries
+    // `translated: false` into the edition record, where the EN->PT lane of
+    // check-entities already reports `not-translated`.
+    log(`TRANSLATION UNAVAILABLE — Ollama at ${OLLAMA_URL}: ${alive.reason}. ` +
+        `Every PT line below will be a COPY of its EN line, not a translation. ` +
+        `The PT draft is monolingual; do not publish it as-is.`);
+    useTranslate = false;
   }
 }
 
+let translated = 0;
 for (const it of shortlist) {
-  if (useLlm && !hasSummarisableGround(it.summary, it.title)) {
+  if (useSummary && !hasSummarisableGround(it.summary, it.title)) {
     log(`NO GROUND "${it.title}" — the feed excerpt is empty once boilerplate is removed, ` +
         `so the model would be writing from the headline alone. Using the headline itself.`);
     it.summaryEn = it.title;
-    it.summaryPt = it.title;
-  } else if (useLlm) {
+  } else if (useSummary) {
     try {
       it.summaryEn = await summarizeEn(it);
-      it.summaryPt = await translatePt(it.summaryEn);
     } catch (err) {
-      log(`LLM FAILED on "${it.title}" — ${err.message}; falling back to feed excerpt for this item`);
+      log(`SUMMARY FAILED on "${it.title}" — ${err.message}; falling back to feed excerpt for this item`);
       it.summaryEn = '';
-      it.summaryPt = '';
     }
   }
   // Boilerplate comes off BEFORE the budget cut, or the headline the feed
@@ -567,8 +593,32 @@ for (const it of shortlist) {
   // reader pays for it twice — once in the heading, once in the excerpt.
   const excerpt = trimToBoundary(stripBoilerplate(it.summary, it.title), EXCERPT_BUDGET);
   if (!it.summaryEn) it.summaryEn = excerpt || it.title;
-  if (!it.summaryPt) it.summaryPt = it.summaryEn;
+
+  // Translation runs on whatever the EN line ended up being — the model's
+  // sentence or the deterministic excerpt. That is the whole point of splitting
+  // the flags: the PT edition does not depend on who wrote the EN line.
+  if (useTranslate) {
+    try {
+      it.summaryPt = await translatePt(it.summaryEn);
+      it.translated = true;
+      translated++;
+    } catch (err) {
+      log(`TRANSLATION FAILED on "${it.title}" — ${err.message}; the PT line is a copy of the EN line`);
+      it.summaryPt = it.summaryEn;
+      it.translated = false;
+    }
+  } else {
+    it.summaryPt = it.summaryEn;
+    it.translated = false;
+  }
 }
+// 🔴 Stated every run, including the good one. "N of M translated" read once a
+// week is what makes a drop to 0 visible; a line that only appears on failure is
+// a line nobody has learned to look for.
+log(`TRANSLATED ${translated}/${shortlist.length} PT lines. ` +
+    (translated === shortlist.length
+      ? 'The PT draft is a translation.'
+      : `${shortlist.length - translated} are COPIES of the EN line — the PT draft is partly or wholly monolingual.`));
 
 const dateIso = new Date().toISOString().slice(0, 10);
 const tags = [...new Set(['radar', ...shortlist.map((i) => i.tag)])];
@@ -595,8 +645,9 @@ if (written.length > 0) {
     schemaVersion: 1,
     dateIso,
     generatedAt: new Date().toISOString(),
-    llm: useLlm,
-    model: useLlm ? OLLAMA_MODEL : null,
+    llm: useSummary,
+    translated: useTranslate,
+    model: (useSummary || useTranslate) ? OLLAMA_MODEL : null,
     drafts: written,
     items: shortlist.map((it) => ({
       title: it.title,
@@ -606,6 +657,12 @@ if (written.length > 0) {
       sourceExcerpt: String(it.summary ?? '').slice(0, PROMPT_EXCERPT),
       summaryEn: it.summaryEn,
       summaryPt: it.summaryPt,
+      // Per item, not only per run: a run can translate some items and fail on
+      // others, and `summaryPt === summaryEn` is NOT a reliable read of it — a
+      // one-word line can survive translation unchanged. The flag says what was
+      // attempted; the comparison says what came out. They answer different
+      // questions and the record needs both.
+      translated: it.translated === true,
     })),
     // Filled in by capture-published.mjs after a human flips `draft: false`.
     published: null,
