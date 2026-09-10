@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "dateIso": "2026-09-10",
+  "generatedAt": "2026-09-10T01:20:15.985Z",
+  "llm": true,
+  "model": "llama3.2:3b",
+  "drafts": [
+    "/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog/src/content/blog/2026-09-10-radar-ai-dev.mdx",
+    "/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog/src/content/blog/2026-09-10-radar-ai-dev-pt.mdx"
+  ],
+  "items": [
+    {
+      "title": "On the Navier–Stokes Millennium Prize Problem",
+      "link": "https://simonwillison.net/2026/Sep/8/on-navier-stokes/",
+      "source": "Simon Willison",
+      "score": 20,
+      "sourceExcerpt": "On the Navier–Stokes Millennium Prize Problem Impressive result from OpenAI, who used an unreleased model to produce a resolution to the Navier–Stokes existence and smoothness problem , one of the seven Millennium Prize Problems that have been subject to a $1,000,000 prize since May 24th, 2000. The discovery is somewhat overshadowed by accusations of skulduggery from Tristan Buckmaster, an NYU mathematics professor who was collaborating on related problems with Levent Alpöge, an accomplished mathematician who currently works for Anthropic. Tristan's complaint accompanied a hastily published version of their own results. Here's the PDF describing what happened . The very short version is that",
+      "summaryEn": "OpenAI's unreleased model solved the Navier-Stokes existence and smoothness problem, one of the seven Millennium Prize Problems, potentially earning them $1,000,000, but its legitimacy has been questioned by a NYU mathematics professor.",
+      "summaryPt": "O modelo não lançado da OpenAI resolviu o problema de existência e suavidade de Navier-Stokes, um dos sete problemas milenares, potencialmente ganhando US$ 1.000.000, mas sua legitimidade foi questionada por um professor de matemática do NYU.",
+      "publishedEn": "OpenAI used an unreleased model to produce a claimed resolution to the Navier–Stokes existence and smoothness problem, one of the seven Millennium Prize Problems, which has carried a $1,000,000 prize since 2000. Its legitimacy has been questioned by an NYU mathematics professor.",
+      "publishedPt": "O modelo não lançado da OpenAI resolviu o problema de existência e suavidade de Navier-Stokes, um dos sete problemas milenares, potencialmente ganhando US$ 1.000.000, mas sua legitimidade foi questionada por um professor de matemática do NYU.",
+      "keptByHuman": true
+    },
+    {
+      "title": "Introducing ChatGPT Images 2.5",
+      "link": "https://simonwillison.net/2026/Sep/8/introducing-chatgpt-images-25/",
+      "source": "Simon Willison",
+      "score": 19,
+      "sourceExcerpt": "Introducing ChatGPT Images 2.5 OpenAI's image generation models are apparently used \"more than 3 billion images across ChatGPT Images and the GPT‑Image models in the API\". This latest release improves their instruction-following ability across multiple turns, responds faster, and \"is better at preserving the subjects in your reference photos\". There are two new model IDs in the API: gpt-image-2.5-sunburst and gpt-image-2.5-flare . Based on this I think Sunburst is the stronger option: Choose Sunburst for workflows where editing precision matters most, and Flare for fast, high-quality everyday image generation. I upgraded my openai_image.py CLI tool to support passing in one or more reference",
+      "summaryEn": "OpenAI's ChatGPT Images 2.5 improves instruction-following ability, response speed, and photo preservation, offering two new model IDs (Sunburst and Flare) for choosing between precision and speed in image generation workflows.",
+      "summaryPt": "A ChatGPT Imagens 2.5 do OpenAI melhora a capacidade de seguir instruções, velocidade de resposta e preservação de fotos, oferecendo duas novas IDs de modelo (Sunburst e Flare) para escolher entre precisão e velocidade em fluxos de trabalho de geração de imagens.",
+      "publishedEn": "OpenAI's ChatGPT Images 2.5 improves instruction-following ability, response speed, and photo preservation, offering two new model IDs (Sunburst and Flare) for choosing between precision and speed in image generation workflows.",
+      "publishedPt": "A ChatGPT Imagens 2.5 do OpenAI melhora a capacidade de seguir instruções, velocidade de resposta e preservação de fotos, oferecendo duas novas IDs de modelo (Sunburst e Flare) para escolher entre precisão e velocidade em fluxos de trabalho de geração de imagens.",
+      "keptByHuman": true
+    },
+    {
+      "title": "Introducing GPT-6 Astra for developers",
+      "link": "https://simonwillison.net/2026/Sep/5/introducing-gpt-6-astra-for-developers/",
+      "source": "Simon Willison",
+      "score": 19,
+      "sourceExcerpt": "Introducing GPT-6 Astra for developers Blink and you'll miss it, but there's a familiar creature at 1m59s : Across the board, Astra has more attention to detail, better understanding of the user's prompt, and can build more sophisticated outputs. In particular, it excels at building 3D models. I've seen it make incredible renderings of gardens, shipyards, animals , cityscapes, even Dyson spheres. Astra really does believe in putting a red neckerchief on a pelican riding a bicycle. Via Hacker News comment Tags: ai , openai , generative-ai , llms , pelican-riding-a-bicycle , gpt-6-astra",
+      "summaryEn": "OpenAI has released GPT-6 Astra, an improved version of its language model that offers more attention to detail and better output quality, particularly in 3D modeling.",
+      "summaryPt": "A OpenAI lançou o GPT-6 Astra, uma versão melhorada do modelo de linguagem que oferece mais atenção aos detalhes e qualidade de saída, especialmente em modelagem tridimensional.",
+      "publishedEn": "OpenAI has released GPT-6 Astra, an improved version of its language model that offers more attention to detail and better output quality, particularly in 3D modeling.",
+      "publishedPt": "A OpenAI lançou o GPT-6 Astra, uma versão melhorada do modelo de linguagem que oferece mais atenção aos detalhes e qualidade de saída, especialmente em modelagem tridimensional.",
+      "keptByHuman": true
+    },
+    {
+      "title": "Driving Developer Excellence: Inside the Program Sprints",
+      "link": "https://developers.googleblog.com/driving-developer-excellence-inside-the-program-sprints/",
+      "source": "Google Dev Blog",
+      "score": 18,
+      "sourceExcerpt": "The Gemini Enterprise Developer Experience (DevEx) program conducts ongoing sprint testing of end-to-end developer workflows to identify and rapidly resolve friction points without relying on internal shortcuts. This recent sprint focused on optimizing enterprise AI governance, including refining setup prerequisites, securing extension configurations, and clarifying policy enforcement mechanics to ensure a smoother, more reliable deployment. Developers can now leverage updated documentation and standardized code samples to improve their experience with Agent Gateway and Semantic Governance configurations.",
+      "summaryEn": "Google's Gemini DevEx program recently completed a sprint focused on optimizing enterprise AI governance, providing developers with improved documentation and code samples for enhanced reliability and smoother deployments of Agent Gateway and Semantic Governance configurations.",
+      "summaryPt": "O programa Gemini DevEx da Google recentemente concluiu uma sprints focada em otimizar a governança de Inteligência Artificial para empresas, fornecendo desenvolvedores com documentação melhorada e exemplos de código para confiabilidade aumentada e deployagens mais suaves do Gateway de Agente e Governança Semântica.",
+      "publishedEn": "Google's Gemini DevEx program recently completed a sprint focused on optimizing enterprise AI governance, providing developers with improved documentation and code samples for enhanced reliability and smoother deployments of Agent Gateway and Semantic Governance configurations.",
+      "publishedPt": "O programa Gemini DevEx da Google recentemente concluiu uma sprints focada em otimizar a governança de Inteligência Artificial para empresas, fornecendo desenvolvedores com documentação melhorada e exemplos de código para confiabilidade aumentada e deployagens mais suaves do Gateway de Agente e Governança Semântica.",
+      "keptByHuman": true
+    },
+    {
+      "title": "4 engineering patterns behind the strongest AI Agents Challenge submissions",
+      "link": "https://developers.googleblog.com/4-engineering-patterns-behind-the-strongest-ai-agents-challenge-submissions/",
+      "source": "Google Dev Blog",
+      "score": 16,
+      "sourceExcerpt": "The recent Google for Startups AI Agents Challenge revealed that the most successful multi-agent systems rely on foundational software engineering patterns rather than just raw model power. Winning architectures consistently implemented bidirectional MCP for seamless inter-agent communication, async event buses for parallel execution, strict unified validation for model fallbacks, and tiered routing to minimize expensive inference calls. By prioritizing these structural practices over simple linear prompt chains, developers can build more resilient, low-latency, and cost-effective agentic workflows.",
+      "summaryEn": "The Google AI Agents Challenge highlighted the importance of foundational software engineering patterns, such as bidirectional MCP and async event buses, for building robust multi-agent systems that outperform raw model power.",
+      "summaryPt": "A Desafio de Agentes Inteligentes da Google destaca a importância de padrões de engenharia de software fundamentais, como MCP bidirecional e canais de eventos assíncronos, para construir sistemas multi-agentes robustos que superam o poder dos modelos em si.",
+      "publishedEn": "The Google AI Agents Challenge highlighted the importance of foundational software engineering patterns, such as bidirectional MCP and async event buses, for building robust multi-agent systems that outperform raw model power.",
+      "publishedPt": "A Desafio de Agentes Inteligentes da Google destaca a importância de padrões de engenharia de software fundamentais, como MCP bidirecional e canais de eventos assíncronos, para construir sistemas multi-agentes robustos que superam o poder dos modelos em si.",
+      "keptByHuman": true
+    },
+    {
+      "title": "AI-MEMORY 2.0 - o melhor sistema de memória para agentes e times",
+      "link": "https://www.akitaonrails.com/2026/09/02/ai-memory-2-0-melhor-sistema-memoria-agentes-e-times/",
+      "source": "AkitaOnRails",
+      "score": 14,
+      "sourceExcerpt": "TL;DR: a ai-memory 2.0 já está no ar , com formato aberto OKF, embeddings locais ligados por padrão e suporte de verdade a vários agentes e a um time inteiro trabalhando no mesmo projeto em paralelo. Abaixo vai o pitch completo. Em julho eu publiquei Novidades no meu AI-MEMORY , onde mostrei o ai-memory run : trocar de Claude Code pra Codex sem perder a linha de trabalho. Naquele dia estávamos na versão 1.17.1. Hoje saiu a 2.0 . E dessa vez não vou repetir como os hooks funcionam nem como uma sessão vira página de wiki. Isso já está nos textos anteriores. Aqui eu quero falar de onde o ai-memory chegou frente à concorrência, o que a 2.0 traz e por que ela mereceu virar um &ldquo;2&rdquo;.",
+      "summaryEn": "AkitaOnRails released AI-MEMORY 2.0, an open-source memory system with improved support for multiple agents and teams working together, addressing competition and offering enhanced features over its predecessor.",
+      "summaryPt": "AkitaoRails lançou a AI-MEMORY 2.0, um sistema de memória aberto com melhor suporte para vários agentes e equipes trabalhando juntas, abordando a competição e oferecendo recursos aprimorados em relação à sua antecessora.",
+      "publishedEn": "AI-MEMORY 2.0 is out, with an open OKF format, local embeddings on by default, and real support for several agents and a whole team working on the same project in parallel.",
+      "publishedPt": "A AI-MEMORY 2.0 está no ar, com formato aberto OKF, embeddings locais ligados por padrão e suporte de verdade a vários agentes e a um time inteiro trabalhando no mesmo projeto em paralelo.",
+      "keptByHuman": true
+    },
+    {
+      "title": "This Week In React #296: React 19.3, DevTools, Next.js, cn, Maps, Effective-RSC, Vidact, uf | 0.88 RC, Expo Modules, Navigation Benchmarks, QuickJS, Goldie, ContinuedTask | Rslib, Vitest, gpu-lexer, Ata, Interop",
+      "link": "https://thisweekinreact.com/newsletter/296",
+      "source": "This Week In React",
+      "score": 13,
+      "sourceExcerpt": "Hi everyone, Seb and Jan here 👋\\!",
+      "summaryEn": "React 19.3 has been released with several new features and improvements, including better DevTools support and performance enhancements that should benefit developers using the library in their applications.",
+      "summaryPt": "O React 19.3 foi lançado com várias novas funcionalidades e melhorias, incluindo uma melhoria na suporte aos DevTools e otimizações de desempenho que devem beneficiar os desenvolvedores que utilizam a biblioteca em suas aplicações.",
+      "publishedEn": "This week's React roundup: React 19.3, DevTools, Next.js, Expo Modules, QuickJS, Rslib and Vitest among the items. The feed carries no summary for this issue, so the headline is the index.",
+      "publishedPt": "O apanhado semanal de React: React 19.3, DevTools, Next.js, Expo Modules, QuickJS, Rslib e Vitest entre os itens. O feed não publica resumo desta edição, então o título é o índice.",
+      "keptByHuman": true
+    },
+    {
+      "title": "Inside the LLM Call: GenAI Observability with OpenTelemetry",
+      "link": "https://opentelemetry.io/blog/2026/genai-observability/",
+      "source": "OpenTelemetry",
+      "score": 13,
+      "sourceExcerpt": "Your AI agent just took 45 seconds to answer a simple question. Was it the model? A slow tool call? A retry loop? Every time an application calls an LLM, a chain of model calls, tool invocations, and token exchanges happens behind the scenes — and without observability, you are guessing. The OpenTelemetry Semantic Conventions for Generative AI give you that visibility. They standardize how GenAI operations are recorded — the model being called, input and output token counts, and when opted in, the full content of prompts, completions, tool calls, and tool results.",
+      "summaryEn": "OpenTelemetry's new semantic conventions provide standardized observability for Generative AI (GenAI) applications, enabling developers to track and debug complex LLM call chains without relying on guesswork or manual debugging.",
+      "summaryPt": "As novas convenções semânticas do OpenTelemetry fornecem uma observabilidade padronizada para aplicações de Inteligência Artificial Gerativa (IA Gen), permitindo aos desenvolvedores rastrear e depurar cadeias de chamadas de LLM complexas sem recorrer à adivinhação ou depuração manual.",
+      "publishedEn": "OpenTelemetry's new semantic conventions provide standardized observability for Generative AI (GenAI) applications, enabling developers to track and debug complex LLM call chains without relying on guesswork or manual debugging.",
+      "publishedPt": "As novas convenções semânticas do OpenTelemetry fornecem uma observabilidade padronizada para aplicações de Inteligência Artificial Gerativa (IA Gen), permitindo aos desenvolvedores rastrear e depurar cadeias de chamadas de LLM complexas sem recorrer à adivinhação ou depuração manual.",
+      "keptByHuman": true
+    }
+  ],
+  "published": {
+    "capturedAt": "2026-09-10T09:19:52.864Z",
+    "files": [
+      "/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog/src/content/blog/2026-09-10-radar-ai-dev.mdx",
+      "/home/hidekina/projetos/aethos/aethos-ideas/aethos-blog/src/content/blog/2026-09-10-radar-ai-dev-pt.mdx"
+    ],
+    "kept": 8,
+    "cut": 0,
+    "survivedVerbatimEn": 5
+  }
+}
