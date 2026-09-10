@@ -50,20 +50,74 @@ end in "no post today", and telling them apart afterwards is impossible if the
 script collapses them into one code. `run-digest.sh` writes the distinction into
 `scripts/news/digest.log` as `RESULT=ok|no-new-items|BROKEN`.
 
-## Weekly cron
+## Weekly schedule — a systemd user timer, not cron
 
 > **Open decision:** whether this should run here at all, or move to a hosted
 > scheduler with a paid API, is recorded — undecided — in
 > [`docs/adr/ADR-001-digest-inference-host.md`](adr/ADR-001-digest-inference-host.md).
 > It is deliberately gated on evidence from the first real Monday runs.
 
-```bash
-crontab -e
-# Monday 08:00 — writes drafts, never publishes
-0 8 * * 1 /home/hidekina/projetos/aethos/aethos-ideas/aethos-blog/scripts/news/run-digest.sh
+Two units in `~/.config/systemd/user/`, not tracked by this repo because they
+carry an absolute path to this checkout:
+
+```
+aethos-blog-digest.service   Type=oneshot, ExecStart=<repo>/scripts/news/run-digest.sh
+aethos-blog-digest.timer     OnCalendar=Mon *-*-* 08:00:00
+                             Persistent=true      <- the whole reason for the move
 ```
 
-**Installed 2026-09-02.** `crontab -l | grep aethos-blog` confirms it.
+```bash
+systemctl --user list-timers aethos-blog-digest.timer --all
+systemctl --user show aethos-blog-digest.timer -p Persistent -p NextElapseUSecRealtime
+systemctl --user start aethos-blog-digest.service    # fire one now, the real path
+```
+
+### Why it moved off cron — measured 2026-09-09
+
+The crontab entry was installed 2026-09-02 and was **correct**. It still
+produced nothing, because this machine is WSL and was suspended across the
+Monday 08:00 window. cron does not catch up a window it slept through; there is
+no retry, no log, no error. The absent `digest.log` reads identically to a job
+that ran and wrote nothing.
+
+| | |
+|---|---|
+| `run-digest` firings in syslog, entire history | **1** — the 09-04 rehearsal |
+| `CRON` line at 2026-09-07 08:00 | **none** |
+| hours logged that day | `00, 03, 08, 09…` — **04–07 absent** |
+| **control** — syslog coverage of 09-07 | both `syslog` and `syslog.1` cover it, 266 `(hidekina) CMD` lines present |
+
+The control is the load-bearing row: a log that simply lacked the day would
+produce the same empty grep as a job that never fired.
+
+```bash
+# recompute — the syslog window rotates, so read the dates back, never trust this table
+grep -a 'run-digest' /var/log/syslog* 2>/dev/null
+grep -aoP '^\d{4}-\d\d-\d\dT\d\d' /var/log/syslog | sort -u | tail -20   # hours actually logged
+grep -ac '(hidekina) CMD' /var/log/syslog                                     # CONTROL: >0 or the grep is blind
+```
+
+`Persistent=true` fires the missed run on the next boot. That is the single
+property cron lacked, and it is the only reason to prefer the timer here — on a
+machine that is always up, the crontab entry would have been fine.
+
+🔴 **Do not leave both installed.** The crontab line was removed in the same
+change; two schedulers on one job means two digests, and `NOTHING_WRITTEN`
+(exit 1) on the second — a red that describes nothing wrong.
+
+```bash
+crontab -l | grep -c 'run-digest.sh'        # must be 0
+crontab -l | grep -c 'aria\|notion'         # CONTROL: >0, or you wiped the crontab
+```
+
+The second line is not decoration. A mistyped `crontab -r` gives the same zero
+as a surgical removal.
+
+🔴 **The first real run through the timer happened 2026-09-09**, fired by hand
+with `systemctl --user start` to recover the slept-through Monday:
+`RESULT=ok`, 2791 items fetched, 8 shortlisted, two drafts written. Node
+resolved through nvm under systemd's environment — the same lookup cron needed,
+exercised again because systemd's `PATH` is no friendlier than cron's.
 
 `run-digest.sh` resolves node itself. Cron runs with `PATH=/usr/bin:/bin`, and
 on this machine node is installed by **nvm**, under
@@ -465,6 +519,13 @@ wrote its `RESULT=` line. Only the diagnosis was wrong, and only a real firing
 showed it.
 
 ### Rehearsing the cron entry — the procedure, and the two ways it bites
+
+> **Superseded 2026-09-09 — kept because it is the record of what was measured.**
+> This job is scheduled by a systemd user timer now; there is no crontab entry to
+> rehearse. The two traps below are properties of `crontab` itself and still bite
+> any other job on this machine, which is why the section stays. The rehearsal
+> equivalent for the timer is one line and needs no backup:
+> `systemctl --user start aethos-blog-digest.service`.
 
 `env -i PATH=/usr/bin:/bin` **simulates** cron. It does not exercise cron's
 shell, its signal handling, or the fact that a leftover line keeps firing. The

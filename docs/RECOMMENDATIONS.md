@@ -29,6 +29,18 @@ identity attached to credit.
 
 ## Approving one
 
+🔴 **`gh issue list --label X` returns empty with exit 0 for a label that does
+not exist**, exactly as it does for a label with no issues. Measured 2026-09-09
+with both ends: a forged label and a real one (`bug`) both printed nothing and
+both exited 0. The `recommendation` label was **missing from the repo** until
+that day, so this triage command would have reported "no submissions" over an
+open issue. It exists now; if the triage ever reads empty and you doubt it:
+
+```bash
+gh label list --repo chidekina/aethos-blog | grep -c '^recommendation'   # must be 1
+gh issue list --repo chidekina/aethos-blog --state all --limit 5         # CONTROL: any issues at all?
+```
+
 ```bash
 gh issue list --label recommendation
 node scripts/recommendations/from-issue.mjs 42 --dry-run   # see the entry, write nothing
