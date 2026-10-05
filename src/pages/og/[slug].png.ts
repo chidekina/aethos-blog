@@ -65,7 +65,7 @@ export async function GET({ props }: APIContext & { props: { post: Awaited<Retur
             props: {
               style: { display: 'flex', flexDirection: 'column', gap: '20px' },
               children: [
-                /* Breadcrumb: Aethos Tech / Blog */
+                /* Breadcrumb: Kina Tech / Blog */
                 {
                   type: 'div',
                   props: {
@@ -73,7 +73,7 @@ export async function GET({ props }: APIContext & { props: { post: Awaited<Retur
                     children: [
                       {
                         type: 'span',
-                        props: { style: { color: 'hsl(0, 0%, 85%)', fontSize: '16px', fontWeight: '600', letterSpacing: '-0.01em' }, children: 'Aethos Tech' },
+                        props: { style: { color: 'hsl(0, 0%, 85%)', fontSize: '16px', fontWeight: '600', letterSpacing: '-0.01em' }, children: 'Kina Tech' },
                       },
                       { type: 'span', props: { style: { color: 'hsl(0, 0%, 30%)', fontSize: '16px' }, children: '/' } },
                       {

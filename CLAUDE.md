@@ -1,6 +1,6 @@
-# Aethos Tech Blog
+# Kina Tech Blog
 
-Blog técnico da Aethos Tech. Bilíngue EN/PT-BR. Artigos sobre micro-SaaS, AI tooling, full-stack engineering e building in Brazil.
+Blog técnico da Kina Tech. Bilíngue EN/PT-BR. Artigos sobre micro-SaaS, AI tooling, full-stack engineering e building in Brazil.
 
 ## Stack
 - Astro + TypeScript

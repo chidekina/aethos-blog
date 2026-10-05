@@ -13,7 +13,7 @@ interface Props {
 }
 
 const {
-  title = 'Aethos Tech Blog',
+  title = 'Kina Tech Blog',
   description = 'Engineering blog. AI experiments. Micro SaaS learnings.',
   ogImage = '/og-default.png',
   lang = 'en',
@@ -23,7 +23,7 @@ const {
   translationSlug,
 } = Astro.props;
 
-const siteTitle = title === 'Aethos Tech Blog' ? title : `${title} — Aethos Tech`;
+const siteTitle = title === 'Kina Tech Blog' ? title : `${title} — Kina Tech`;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const translationURL = translationSlug ? new URL(`/blog/${translationSlug}/`, Astro.site) : null;
 
@@ -31,7 +31,7 @@ const translationURL = translationSlug ? new URL(`/blog/${translationSlug}/`, As
 const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: 'Aethos Tech Blog',
+  name: 'Kina Tech Blog',
   url: Astro.site?.toString(),
   description: 'Engineering blog. AI experiments. Micro SaaS learnings.',
   publisher: {
@@ -73,7 +73,7 @@ const websiteSchema = {
     <!-- JSON-LD per-page slot -->
     <slot name="head" />
     <link rel="sitemap" href="/sitemap-index.xml" />
-    <link rel="alternate" type="application/rss+xml" title="Aethos Tech Blog" href="/rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Kina Tech Blog" href="/rss.xml" />
     <title>{siteTitle}</title>
   </head>
   <body style="background: var(--color-background); color: var(--color-text); min-height: 100vh; display: flex; flex-direction: column;">
@@ -99,13 +99,13 @@ const websiteSchema = {
         <!-- Breadcrumb logo -->
         <div style="display: flex; align-items: center; gap: 1.25rem; min-width: 0; flex: 1;">
           <a
-            href="https://www.aethostech.com.br"
+            href="https://kinatech.com.br"
             target="_blank"
             rel="noopener noreferrer"
             style="font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--color-text); text-decoration: none; letter-spacing: -0.01em; white-space: nowrap; transition: color 150ms ease-out;"
             class="nav-logo"
           >
-            Aethos Tech
+            Kina Tech
           </a>
           <span aria-hidden="true" style="color: var(--color-border); flex-shrink: 0;">/</span>
           <a
@@ -177,17 +177,17 @@ const websiteSchema = {
     <footer style="border-top: 1px solid var(--color-border); padding: 2rem 1.5rem; position: relative; z-index: 1;">
       <div style="max-width: 800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <span style="font-family: var(--font-display); font-size: 0.875rem; color: var(--color-text-muted);">
-          © {new Date().getFullYear()} Aethos Tech
+          © {new Date().getFullYear()} Kina Tech
         </span>
         <div style="display: flex; align-items: center; gap: 1.25rem;">
           <a
-            href="https://www.aethostech.com.br"
+            href="https://kinatech.com.br"
             target="_blank"
             rel="noopener noreferrer"
             class="nav-link"
             style="font-size: 0.8rem;"
           >
-            aethostech.com.br ↗
+            kinatech.com.br ↗
           </a>
           <a href="/rss.xml" class="nav-link" style="font-size: 0.8rem;">RSS</a>
         </div>
@@ -282,11 +282,11 @@ const websiteSchema = {
       const langEnLabel = document.getElementById('lang-en-label') as HTMLElement | null;
       const langPtLabel = document.getElementById('lang-pt-label') as HTMLElement | null;
 
-      let uiLang = localStorage.getItem('aethos-lang') || pageLang;
+      let uiLang = localStorage.getItem('kina-lang') || pageLang;
 
       function applyLang(lang: string) {
         uiLang = lang;
-        localStorage.setItem('aethos-lang', lang);
+        localStorage.setItem('kina-lang', lang);
         // Swap text nodes
         document.querySelectorAll('[data-i18n]').forEach((el) => {
           const key = (el as HTMLElement).dataset.i18n!;
@@ -308,7 +308,7 @@ const websiteSchema = {
         if (langEnLabel) langEnLabel.style.color = lang === 'en' ? activeColor : dimColor;
         if (langPtLabel) langPtLabel.style.color = lang === 'pt' ? activeColor : dimColor;
         // Notify other scripts (e.g. homepage post filter)
-        document.dispatchEvent(new CustomEvent('aethos:lang-change', { detail: lang }));
+        document.dispatchEvent(new CustomEvent('kina:lang-change', { detail: lang }));
       }
 
       applyLang(uiLang);
@@ -316,7 +316,7 @@ const websiteSchema = {
       langToggle?.addEventListener('click', () => {
         const newLang = uiLang === 'en' ? 'pt' : 'en';
         if (translationSlug && newLang !== pageLang) {
-          localStorage.setItem('aethos-lang', newLang);
+          localStorage.setItem('kina-lang', newLang);
           window.location.href = `/blog/${translationSlug}/`;
         } else {
           applyLang(newLang);
@@ -348,12 +348,12 @@ const websiteSchema = {
       }
 
       // Restore saved preference
-      const saved = localStorage.getItem('aethos-theme');
+      const saved = localStorage.getItem('kina-theme');
       applyTheme(saved === 'light');
 
       toggle?.addEventListener('click', () => {
         const isLight = !html.classList.contains('light');
-        localStorage.setItem('aethos-theme', isLight ? 'light' : 'dark');
+        localStorage.setItem('kina-theme', isLight ? 'light' : 'dark');
         applyTheme(isLight);
       });
 

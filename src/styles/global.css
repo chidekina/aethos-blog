@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* Aethos LP palette — monochromatic */
+  /* Kina LP palette — monochromatic */
   --color-background: hsl(0 0% 4%);
   --color-surface:    hsl(0 0% 8%);
   --color-muted:      hsl(0 0% 12%);

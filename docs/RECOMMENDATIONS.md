@@ -46,7 +46,7 @@ gh issue list --label recommendation
 node scripts/recommendations/from-issue.mjs 42 --dry-run   # see the entry, write nothing
 node scripts/recommendations/from-issue.mjs 42             # write the file
 bun run build
-gh issue close 42 --comment "Live at https://blog.aethostech.com.br/recommendations"
+gh issue close 42 --comment "Live at https://blog.kinatech.com.br/recommendations"
 ```
 
 Exit codes: `0` written · `1` rejected (bad or duplicate input — the message

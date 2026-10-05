@@ -1,6 +1,6 @@
 # Architecture — aethos-blog
 
-Bilingual (EN/PT-BR) engineering blog for Aethos Tech. Astro 5, statically
+Bilingual (EN/PT-BR) engineering blog for Kina Tech. Astro 5, statically
 built, deployed on Vercel from `main`.
 
 ## The one decision everything else follows from
@@ -59,8 +59,8 @@ Language is a **client-side preference**, not a route prefix. There is no
   attributes. Adding a UI string means adding the key in **both** `en` and `pt`
   objects — a key present in one and missing in the other silently keeps the
   English text.
-- The choice persists in `localStorage['aethos-lang']` and is broadcast as the
-  `aethos:lang-change` DOM event, which the homepage post filter listens to.
+- The choice persists in `localStorage['kina-lang']` and is broadcast as the
+  `kina:lang-change` DOM event, which the homepage post filter listens to.
 
 A page that renders both languages at once (like `/about`) uses
 `data-lang-block="en|pt"` on wrapper elements; the layout shows one and hides
@@ -103,7 +103,7 @@ becomes unreachable while the build stays green.
 - **Syntax highlighting** is Shiki, configured through Astro's markdown
   pipeline; no client-side highlighter ships.
 - **Theme** is a `light` class on `<html>` plus CSS custom properties, restored
-  from `localStorage['aethos-theme']`.
+  from `localStorage['kina-theme']`.
 - **The starfield** is a `<canvas>` painted by the inline script at the bottom
   of `BaseLayout.astro`. It is decorative, `aria-hidden`, and pointer-events
   none.
