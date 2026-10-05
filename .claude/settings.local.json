@@ -8,7 +8,7 @@
       "Bash(head:*)",
       "Skill(commit-pro)",
       "Bash(git push:*)",
-      "WebFetch(domain:blog.aethostech.com.br)",
+      "WebFetch(domain:blog.kinatech.com.br)",
       "Bash(bun run build:*)",
       "Bash(bun run dev:*)",
       "Bash(git -C /home/hidekina/projetos/aethos-ideas/aethos-blog diff --stat HEAD)",
