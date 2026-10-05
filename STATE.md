@@ -1,6 +1,6 @@
 # aethos-blog — STATE
 
-**status:** live · https://blog.aethostech.com.br
+**status:** live · https://blog.kinatech.com.br
 **last updated:** 2026-09-02
 
 ## What exists

@@ -156,7 +156,7 @@ async function fetchFeed(src) {
   try {
     const res = await fetch(src.url, {
       signal: ctl.signal,
-      headers: { 'user-agent': 'aethos-blog-news/1.0 (+https://blog.aethostech.com.br)' },
+      headers: { 'user-agent': 'aethos-blog-news/1.0 (+https://blog.kinatech.com.br)' },
     });
     if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
     return { ok: true, xml: await res.text() };

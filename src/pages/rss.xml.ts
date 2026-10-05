@@ -7,7 +7,7 @@ export async function GET(context: APIContext) {
   const sorted = posts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 
   return rss({
-    title: 'Aethos Tech Blog',
+    title: 'Kina Tech Blog',
     description: 'Engineering blog. AI experiments. Micro SaaS learnings.',
     site: context.site!,
     stylesheet: '/rss.xsl',

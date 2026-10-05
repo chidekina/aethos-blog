@@ -87,7 +87,7 @@
       <body>
         <header>
           <div class="logo">
-            <span class="logo-name">Aethos Tech</span>
+            <span class="logo-name">Kina Tech</span>
             <span class="logo-sep">/</span>
             <span class="logo-sub">Blog</span>
           </div>

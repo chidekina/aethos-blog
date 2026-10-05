@@ -1,7 +1,7 @@
 {
   "project": "aethos-blog",
   "branchName": "ralph/aethos-blog-mvp",
-  "description": "Aethos Labs Blog — Bilingual engineering blog with Astro + MDX, documenting ARIA progress and tech essays",
+  "description": "Kina Tech Blog — Bilingual engineering blog with Astro + MDX, documenting ARIA progress and tech essays",
   "specRef": "PRD-aethos-blog",
   "requiredEffects": ["file-write", "file-read"],
   "userStories": [
@@ -51,7 +51,7 @@
     {
       "id": "US-003",
       "title": "Create base layout with dark mode and design tokens",
-      "description": "As a visitor, I want the blog to have a clean dark-first design with purple Aethos accents so that it reflects the Aethos brand.",
+      "description": "As a visitor, I want the blog to have a clean dark-first design with purple Kina accents so that it reflects the Kina brand.",
       "effects": ["file-write"],
       "isTotal": false,
       "latencyBudgetMs": 200,
@@ -63,8 +63,8 @@
         "Default background is dark (`#0a0a0a`), text is `#e5e5e5`",
         "Monospace font applied to `<code>` and `<pre>` elements (JetBrains Mono or system-mono fallback via Tailwind)",
         "Dark mode toggle button in header: clicking toggles `dark` class on `<html>` and persists to localStorage",
-        "Site header includes: Aethos Labs logo/name (text), nav links (Home, About), dark mode toggle",
-        "Site footer includes: 'Aethos Labs' + current year",
+        "Site header includes: Kina Tech logo/name (text), nav links (Home, About), dark mode toggle",
+        "Site footer includes: 'Kina Tech' + current year",
         "Typecheck passes",
         "Verify in browser using dev-browser skill"
       ],
@@ -108,7 +108,7 @@
       "acceptanceCriteria": [
         "Create `src/pages/index.astro` as home page",
         "Uses `BaseLayout.astro`",
-        "Hero section: 'Aethos Labs' heading, one-line description ('Engineering blog. AI experiments. Micro SaaS learnings.')",
+        "Hero section: 'Kina Tech' heading, one-line description ('Engineering blog. AI experiments. Micro SaaS learnings.')",
         "Post list shows: title (link to post), date, lang badge, tags, reading time, and description excerpt",
         "Posts sorted by date descending (newest first)",
         "Draft posts excluded from list",
@@ -146,7 +146,7 @@
     {
       "id": "US-007",
       "title": "Create About page",
-      "description": "As a visitor, I want to learn about Aethos Labs and ARIA so that I understand who is behind the blog.",
+      "description": "As a visitor, I want to learn about Kina Tech and ARIA so that I understand who is behind the blog.",
       "effects": ["file-write"],
       "isTotal": false,
       "latencyBudgetMs": 200,
@@ -155,7 +155,7 @@
       "acceptanceCriteria": [
         "Create `src/pages/about.astro`",
         "Uses `BaseLayout.astro`",
-        "Section 1: 'Aethos Labs' — brief description of the micro SaaS factory philosophy",
+        "Section 1: 'Kina Tech' — brief description of the micro SaaS factory philosophy",
         "Section 2: 'ARIA' — introduce ARIA as an AI executive assistant being built in public",
         "Section 3: 'César' — author bio (1 paragraph, can be placeholder)",
         "Link to home page and GitHub (placeholder link ok)",
@@ -179,7 +179,7 @@
         "Create `src/pages/rss.xml.ts` using `@astrojs/rss`",
         "Feed includes all published posts (not drafts)",
         "Each item has: title, description, pubDate, link",
-        "Feed title: 'Aethos Labs Blog'",
+        "Feed title: 'Kina Tech Blog'",
         "RSS link tag added to `<head>` in BaseLayout",
         "Accessing `/rss.xml` returns valid XML with correct content-type",
         "Typecheck passes"
@@ -221,7 +221,7 @@
       "acceptanceCriteria": [
         "Create `src/pages/og/[slug].png.ts` endpoint that generates OG images",
         "Use `@vercel/og` or `satori` + `resvg-js` for image generation",
-        "OG image layout: dark background (#0a0a0a), purple accent border, post title (large), 'Aethos Labs' logo text, post date and tags",
+        "OG image layout: dark background (#0a0a0a), purple accent border, post title (large), 'Kina Tech' logo text, post date and tags",
         "Each post's `<head>` has `<meta property='og:image'>` pointing to `/og/[slug].png`",
         "Default OG image for home and about pages",
         "Image dimensions: 1200x630",
