@@ -1,7 +1,45 @@
-User-agent: *
+# AI crawler policy (2026-10-22): search/citation/user-fetch allowed, training opted out.
+# robots.txt is a request, not enforcement. Research: claude-harness .planning/research/2026-10-22-ai-crawlers/
+
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Applebot
+User-agent: Amzn-SearchBot
+User-agent: MistralAI-Index
+User-agent: MistralAI-User
+User-agent: DuckAssistBot
+User-agent: Googlebot
+User-agent: Bingbot
+Allow: /
+Disallow: /og/
+
+# Link-preview bots: need /og/ images for share cards, so no /og/ block here.
+User-agent: Twitterbot
+User-agent: facebookexternalhit
+User-agent: LinkedInBot
+User-agent: Slackbot-LinkExpanding
+User-agent: Discordbot
+User-agent: WhatsApp
+User-agent: TelegramBot
 Allow: /
 
-# Don't index generated OG images
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: Meta-ExternalAgent
+User-agent: MistralAI-Training
+User-agent: Amazonbot
+User-agent: CCBot
+User-agent: Bytespider
+Disallow: /
+
+User-agent: *
+Allow: /
 Disallow: /og/
 
 Sitemap: https://blog.aethostech.com.br/sitemap-index.xml
