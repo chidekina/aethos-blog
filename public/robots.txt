@@ -14,10 +14,18 @@ User-agent: MistralAI-User
 User-agent: DuckAssistBot
 User-agent: Googlebot
 User-agent: Bingbot
-User-agent: Twitterbot
-User-agent: facebookexternalhit
 Allow: /
 Disallow: /og/
+
+# Link-preview bots: need /og/ images for share cards, so no /og/ block here.
+User-agent: Twitterbot
+User-agent: facebookexternalhit
+User-agent: LinkedInBot
+User-agent: Slackbot-LinkExpanding
+User-agent: Discordbot
+User-agent: WhatsApp
+User-agent: TelegramBot
+Allow: /
 
 User-agent: GPTBot
 User-agent: ClaudeBot
