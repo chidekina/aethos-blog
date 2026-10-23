@@ -41,6 +41,28 @@ bun build         # Build to ./dist/
 bun preview       # Preview production build
 ```
 
+## Agent-friendly Markdown
+
+Each published post has a static `/blog/<slug>.md` twin, linked from its HTML
+head. It contains the title, date, language, tags, description, and raw body
+with MDX module statements removed (code examples are preserved).
+Negotiation is configured via `vercel.json` routes and is **to be verified on a
+Vercel preview**: `Accept: text/markdown` should serve the twin at the post URL,
+with HTML for default and `text/html` requests and `Vary: Accept` on both variants.
+
+```bash
+curl -i -H 'Accept: text/markdown' https://blog.aethostech.com.br/blog/2026-02-20-hello-world
+curl -i https://blog.aethostech.com.br/blog/2026-02-20-hello-world
+curl -i -H 'Accept: text/html' https://blog.aethostech.com.br/blog/2026-02-20-hello-world
+bash scripts/agent-md/verify.sh dist
+bash scripts/agent-md/verify.test.sh
+bash scripts/agent-md/verify.sh https://blog.aethostech.com.br
+```
+
+Preview SSO requires `VERCEL_AUTOMATION_BYPASS_SECRET` in the environment for
+live verification. The script sends it as the protection bypass header.
+Astro dev/preview does not honor `vercel.json`; request the `.md` URL directly there.
+
 ## Writing Posts
 
 Create a new `.mdx` file in `src/content/blog/`:

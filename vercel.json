@@ -1,0 +1,55 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    {
+      "src": "^/blog/[^/.]+/?$",
+      "headers": {
+        "Vary": "Accept"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/blog/[^/.]+\\.md$",
+      "headers": {
+        "Vary": "Accept",
+        "Content-Type": "text/markdown; charset=utf-8"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/(.*)$",
+      "headers": {
+        "Content-Signal": "ai-train=no, search=yes, ai-input=yes"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/blog/([^/.]+)/?$",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": "(?:.*[,\\s])?text/markdown(?![^,]*;\\s*q=0(?:\\.0*)?\\s*(?:[;,]|$))(?:\\s*;[^,]*)?(?:,.*)?"
+        }
+      ],
+      "headers": {
+        "Content-Type": "text/markdown; charset=utf-8"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/blog/([^/.]+)/?$",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": "(?:.*[,\\s])?text/markdown(?![^,]*;\\s*q=0(?:\\.0*)?\\s*(?:[;,]|$))(?:\\s*;[^,]*)?(?:,.*)?"
+        }
+      ],
+      "dest": "/blog/$1.md"
+    },
+    {
+      "handle": "filesystem"
+    }
+  ]
+}
