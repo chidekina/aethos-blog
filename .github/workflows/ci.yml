@@ -68,6 +68,9 @@ jobs:
       - name: Build (schema validation, OG images, RSS, sitemap)
         run: bun run build
 
+      - name: MDX statement stripping
+        run: bun src/lib/strip-mdx.test.ts
+
       - name: Agent-friendly Markdown verification
         run: |
           bash scripts/agent-md/verify.sh dist
