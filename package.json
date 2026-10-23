@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@vercel/routing-utils": "^6.6.0",
     "typescript": "^6"
   }
 }

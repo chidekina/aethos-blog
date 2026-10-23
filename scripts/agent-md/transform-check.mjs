@@ -9,7 +9,7 @@ const configPath = process.argv[2] ?? fileURLToPath(new URL('../../vercel.json',
 const { routes, error } = getTransformedRoutes(JSON.parse(readFileSync(configPath, 'utf8')));
 assert.ifError(error);
 assert.ok(routes?.length, 'transformed routes exist');
-const negotiation = routes.findIndex((route) => route.has?.some((h) => h.key === 'accept'));
+const negotiation = routes.findIndex((route) => route.dest && route.has?.some((h) => h.key === 'accept'));
 const filesystem = routes.findIndex((route) => route.handle === 'filesystem');
 assert.ok(negotiation >= 0 && negotiation < filesystem, 'negotiation precedes filesystem');
 assert.equal(routes[negotiation].continue, undefined, 'negotiation terminates routing');
@@ -36,8 +36,11 @@ for (const path of ['/blog/x', '/blog/x/']) {
   const result = response(path, 'text/markdown');
   assert.equal(result.dest, '/blog/x.md');
   assert.equal(result.headers.Vary, 'Accept', 'Vary survives terminating rewrite');
+  assert.equal(result.headers['Content-Type'], 'text/markdown; charset=utf-8', 'rewritten response is typed Markdown');
+  assert.equal(response(path, 'text/markdown;charset=utf-8').dest, '/blog/x.md', 'charset param still negotiates');
+  assert.equal(response(path, 'text/html').headers['Content-Type'], undefined, 'HTML request is not typed Markdown');
   assert.equal(result.headers['Content-Signal'], 'ai-train=no, search=yes, ai-input=yes', 'Content-Signal survives terminating rewrite');
-  for (const accept of ['text/markdown;q=0', 'text/html', '*/*']) {
+  for (const accept of ['text/markdown;q=0', 'text/markdown;charset=utf-8;q=0', 'text/html', '*/*']) {
     assert.equal(response(path, accept).dest, path, `${accept} does not rewrite`);
   }
 }

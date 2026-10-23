@@ -111,7 +111,7 @@ routes = config.get('routes', [])
 filesystem = [i for i, rule in enumerate(routes) if rule.get('handle') == 'filesystem']
 check(len(filesystem) == 1 and filesystem[0] == len(routes) - 1, 'filesystem handle last')
 fs = filesystem[0] if filesystem else -1
-negotiation = [(i, rule) for i, rule in enumerate(routes) if rule.get('has')]
+negotiation = [(i, rule) for i, rule in enumerate(routes) if rule.get('has') and rule.get('dest')]
 check(len(negotiation) == 1, 'Accept negotiation route')
 for i, rule in negotiation:
     check(i < fs, 'negotiation before filesystem')
@@ -120,10 +120,15 @@ for i, rule in negotiation:
     accept = [h for h in conditions if h.get('type') == 'header' and h.get('key', '').lower() == 'accept']
     check(len(conditions) == 1 and len(accept) == 1, 'Accept header condition')
     pattern = accept[0].get('value') if accept else None
-    for value in ('text/markdown', 'text/html, text/markdown;q=0.8', '*/*, text/markdown'):
+    for value in ('text/markdown', 'text/markdown;charset=utf-8', 'text/markdown; charset=utf-8; q=0.5', 'text/html, text/markdown;q=0.8', '*/*, text/markdown'):
         check(matches(pattern, value), f'Accept regex matches {value}')
-    for value in ('text/markdown;q=0', 'text/html', '*/*'):
+    for value in ('text/markdown;q=0', 'text/markdown; q=0.0', 'text/markdown;charset=utf-8;q=0', 'text/html', '*/*', 'text/markdownx'):
         check(not matches(pattern, value), f'Accept regex rejects {value}')
+    ctype = [(j, r) for j, r in enumerate(routes) if r.get('has') and not r.get('dest')
+             and r.get('headers', {}).get('Content-Type') == 'text/markdown; charset=utf-8'
+             and r.get('has') == conditions and r.get('src') == rule.get('src')
+             and r.get('continue') is True and j < i]
+    check(len(ctype) == 1, 'Content-Type header route for rewritten URL before negotiation')
     for path in ('/blog/x', '/blog/x/'):
         check(matches(rule.get('src'), path), f'negotiation src matches {path}')
     for path in ('/blog/x.md', '/blog/', '/blog/a/b'):
@@ -147,8 +152,11 @@ check(any(rule.get('src') == '^/(.*)$'
           for _, rule in header_routes), 'global Content-Signal')
 sys.exit(1 if failed else 0)
 PY
-if node -e "require.resolve('@vercel/routing-utils')" >/dev/null 2>&1; then
+if node -e "require.resolve('@vercel/routing-utils', {paths: [process.argv[1]]})" "$script_dir" >/dev/null 2>&1; then
   node "$script_dir/transform-check.mjs" "$vercel_json" || failed=1
+elif [[ "${CI:-}" == true ]]; then
+  echo 'FAIL: @vercel/routing-utils not installed (required in CI)'
+  failed=1
 else
   echo 'SKIP: @vercel/routing-utils not installed'
 fi

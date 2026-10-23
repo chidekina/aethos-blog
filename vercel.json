@@ -29,7 +29,21 @@
         {
           "type": "header",
           "key": "accept",
-          "value": "(?:^|.*[,\\s])text/markdown(?:\\s*(?:,|;\\s*q=(?:1|0?\\.[0-9]*[1-9][0-9]*)|$).*)?$"
+          "value": "(?:.*[,\\s])?text/markdown(?![^,]*;\\s*q=0(?:\\.0*)?\\s*(?:[;,]|$))(?:\\s*;[^,]*)?(?:,.*)?"
+        }
+      ],
+      "headers": {
+        "Content-Type": "text/markdown; charset=utf-8"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/blog/([^/.]+)/?$",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": "(?:.*[,\\s])?text/markdown(?![^,]*;\\s*q=0(?:\\.0*)?\\s*(?:[;,]|$))(?:\\s*;[^,]*)?(?:,.*)?"
         }
       ],
       "dest": "/blog/$1.md"
