@@ -1,0 +1,36 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/blog/:slug([^/.]+)",
+      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
+      "destination": "/blog/:slug.md"
+    },
+    {
+      "source": "/blog/:slug([^/.]+)/",
+      "has": [{ "type": "header", "key": "accept", "value": "(.*)text/markdown(.*)" }],
+      "destination": "/blog/:slug.md"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/blog/:slug([^/.]+)",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/blog/:slug([^/.]+)/",
+      "headers": [{ "key": "Vary", "value": "Accept" }]
+    },
+    {
+      "source": "/blog/:slug.md",
+      "headers": [
+        { "key": "Vary", "value": "Accept" },
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [{ "key": "Content-Signal", "value": "ai-train=no, search=yes, ai-input=yes" }]
+    }
+  ]
+}

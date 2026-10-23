@@ -72,6 +72,7 @@ const articleSchema = {
 >
   <!-- JSON-LD BlogPosting -->
   <script type="application/ld+json" set:html={JSON.stringify(articleSchema)} slot="head" />
+  <link rel="alternate" type="text/markdown" href={`/blog/${post.slug}.md`} slot="head" />
 
   <article>
     <!-- Post Header -->

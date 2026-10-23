@@ -68,6 +68,11 @@ jobs:
       - name: Build (schema validation, OG images, RSS, sitemap)
         run: bun run build
 
+      - name: Agent-friendly Markdown verification
+        run: |
+          bash scripts/agent-md/verify.sh dist
+          bash scripts/agent-md/verify.test.sh
+
       # These run the real scripts against fixtures, no network required.
       - name: News pipeline suite
         run: bash scripts/news/fetch-news.test.sh
